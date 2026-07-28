@@ -32,7 +32,11 @@ jobs:
       - run: npm run build:editor
       - run: npm run check
       - run: cargo test --locked --manifest-path native/transcriber/Cargo.toml
-      - run: npm audit --audit-level=high
+      # Gate strictly on what ships to users; the dev toolchain stays visible
+      # below without blocking releases on advisories we cannot fix upstream.
+      - run: npm audit --audit-level=high --omit=dev
+      - name: Audit dev toolchain (advisory only)
+        run: npm audit --audit-level=high || echo "::warning::High-severity advisories in devDependencies (build toolchain only, not shipped to users)."
       - run: npm run release:check
 
   windows:

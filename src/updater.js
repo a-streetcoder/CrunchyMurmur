@@ -19,7 +19,7 @@ function setStatus(state, message, extra = {}) {
 function friendlyError(error) {
   const message = String(error?.message || error || 'Unknown update error.');
   if (/404|releases\.atom/i.test(message)) {
-    return 'No public GitHub release is available yet. Update checks will start after the first release is published.';
+    return 'No update is available for this channel on GitHub Releases right now. This can be temporary while a release is being published — try again later.';
   }
   if (/ENOTFOUND|ECONN|network|timed?\s*out/i.test(message)) {
     return 'Could not reach GitHub Releases. Check your connection and try again.';
