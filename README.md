@@ -151,6 +151,7 @@ Native release packages must be built on their target platform. See [Contributin
 - [Updating](docs/updating.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Architecture](docs/architecture.md)
+- [On-device Transcription SDK](docs/on-device-sdk.md)
 - [Release process](docs/releasing.md)
 - [Roadmap](docs/project/roadmap.md)
 - [Project status](docs/project/status.md)
