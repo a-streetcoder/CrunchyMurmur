@@ -17,7 +17,7 @@ A versioned manifest describing the files, checksums, languages, quantisation an
 _Avoid_: Model config, download entry
 
 **Transcript Outcome**:
-The result of a Voice Session, classified as speech, no speech, cancelled or failed.
+The successful result of a Voice Session, classified as speech or no speech. Cancellation and failure reject with stable errors and are not Transcript Outcomes.
 _Avoid_: Response, payload
 
 **Host Recorder**:

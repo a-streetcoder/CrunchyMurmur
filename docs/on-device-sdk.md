@@ -167,6 +167,10 @@ type LocalTranscriber = {
 };
 ```
 
+`Transcript` represents successful inference only. Cancellation rejects with
+the stable `CANCELLED` error, and every failure rejects with its corresponding
+stable error code; neither is a `Transcript.outcome`.
+
 The exact language-specific names may change before the first alpha. The behavioural contract below is the stable design target.
 
 Native adapters express cancellation using their platform convention: Swift task cancellation, Kotlin coroutine cancellation, Rust cancellation tokens and React Native promise or event cancellation. Each maps to the same engine behaviour as `AbortSignal`.
@@ -207,6 +211,7 @@ import { createLocalTranscriber } from '@crunchymurmur/transcribe-node';
 
 const transcriber = createLocalTranscriber({
   modelDirectory: applicationModelDirectory,
+  trustedManifestSha256: verifiedRelease.models.parakeetV3.manifestSha256,
 });
 
 await transcriber.prepare();
@@ -286,7 +291,27 @@ A profile manifest will contain at least:
 }
 ```
 
-Release manifests must contain actual sizes and SHA-256 values. A profile is rejected when files are missing, checksums do not match, the schema is unsupported or the engine version is incompatible.
+Release manifests must contain actual sizes and SHA-256 values. A profile is
+rejected when files are missing, checksums do not match, the schema is
+unsupported or the engine version is incompatible.
+
+Checksums are not a trust anchor by themselves. Production adapters use one of
+these authenticated paths:
+
+- a model bundled by the host pins the manifest SHA-256 in the host's signed
+  application configuration;
+- a downloaded model is listed in a signed release index containing its model
+  ID, version and manifest SHA-256. The release pipeline signs that index, and
+  each adapter verifies it with an Ed25519 public key pinned in the adapter
+  before accepting the digest;
+- an embedding host may provide its own trust policy, but must supply an
+  already-authenticated manifest digest to the engine.
+
+The engine compares the accepted manifest's digest with that trusted digest
+before it validates the individual files. HTTPS, a GitHub URL, or a locally
+generated manifest is not sufficient on its own, and trust-on-first-use is not
+the production default. Development builds may explicitly allow an untrusted
+profile, but release builds must not enable that option.
 
 Model acquisition is deliberately separate:
 
