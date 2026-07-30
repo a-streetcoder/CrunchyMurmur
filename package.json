@@ -65,6 +65,7 @@
     "productName": "CrunchyMurmur",
     "files": [
       "src/**/*",
+      "packages/transcribe-node/**/*",
       "ui/**/*",
       "assets/icon-palette.ico",
       "assets/tray-palette.png",

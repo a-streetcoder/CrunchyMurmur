@@ -4,6 +4,7 @@ const path = require('path');
 const https = require('https');
 const { app } = require('electron');
 const { atomicWriteFileSync } = require('./file-utils');
+const { createModelProfileManifest } = require('./model-profile');
 
 // Curated subset of whisper.cpp ggml models on HuggingFace. Sizes are bytes
 // of the .bin file as published on the LFS endpoint, used for the progress
@@ -412,6 +413,11 @@ async function downloadDirectoryModel(meta, onProgress) {
       });
       completedBytes += file.size;
     }
+    atomicWriteFileSync(
+      path.join(partialPath, 'crunchymurmur-model.json'),
+      JSON.stringify(createModelProfileManifest(meta), null, 2),
+      'utf8',
+    );
     fs.rmSync(finalPath, { recursive: true, force: true });
     fs.renameSync(partialPath, finalPath);
     if (!isInstalled(id)) throw new Error('The downloaded Parakeet model is incomplete.');
