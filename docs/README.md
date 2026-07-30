@@ -15,6 +15,7 @@ This documentation covers installation, day-to-day use, platform differences, de
 ## Build and maintain CrunchyMurmur
 
 - [Architecture](architecture.md) — process boundaries, storage, native integrations, and security model.
+- [On-device Transcription SDK](on-device-sdk.md) — approved developer design for the reusable Rust engine and desktop/native adapters.
 - [Contributing](../.github/CONTRIBUTING.md) — local setup, checks, pull requests, and platform expectations.
 - [Releasing](releasing.md) — signed cross-platform releases, manifests, checksums, and attestations.
 - [Security policy](../.github/SECURITY.md) — supported versions and private vulnerability reporting.

@@ -25,6 +25,7 @@
     { slug: 'troubleshooting', file: 'troubleshooting.md', title: 'Troubleshooting', group: 'Guides' },
     { slug: 'building-from-source', file: 'building-from-source.md', title: 'Building from source', group: 'Development' },
     { slug: 'architecture', file: 'architecture.md', title: 'Architecture', group: 'Development' },
+    { slug: 'on-device-sdk', file: 'on-device-sdk.md', title: 'On-device SDK', group: 'Development' },
     { slug: 'releasing', file: 'releasing.md', title: 'Release process', group: 'Development' },
     { slug: 'roadmap', file: 'project/roadmap.md', title: 'Roadmap', group: 'Project' },
     { slug: 'status', file: 'project/status.md', title: 'Project status', group: 'Project' },
