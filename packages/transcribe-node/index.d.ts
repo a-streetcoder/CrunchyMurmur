@@ -4,6 +4,13 @@ export type TranscriptionErrorCode =
   | 'MODEL_UNTRUSTED'
   | 'MODEL_NOT_PREPARED'
   | 'AUDIO_INVALID'
+  | 'LANGUAGE_UNSUPPORTED'
+  | 'RUNTIME_MISSING'
+  | 'ENGINE_BUSY'
+  | 'ENGINE_CRASHED'
+  | 'CANCELLED'
+  | 'TIMED_OUT'
+  | 'DISPOSED'
   | 'INFERENCE_FAILED'
   | 'INTERNAL';
 

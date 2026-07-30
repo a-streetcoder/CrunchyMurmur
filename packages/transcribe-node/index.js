@@ -21,6 +21,10 @@ class TranscriptionError extends Error {
   }
 }
 
+function transcriptionError(errorCode, error, recoverable = true) {
+  return new TranscriptionError({ errorCode, error, recoverable });
+}
+
 class OnDeviceTranscriber {
   constructor({ resolveExecutable, spawnProcess = spawn, logger = console, loadTimeoutMs = LOAD_TIMEOUT_MS, inferenceTimeoutMs = INFERENCE_TIMEOUT_MS } = {}) {
     this.resolveExecutable = resolveExecutable;
@@ -54,13 +58,20 @@ class OnDeviceTranscriber {
     trustedManifestSha256 = '',
   }, { signal } = {}) {
     const modelPath = String(parakeetModelPath || '').trim();
-    if (!modelPath) throw new Error('Download Parakeet V3 before using this engine.');
+    if (!modelPath) {
+      throw transcriptionError(
+        'MODEL_NOT_FOUND',
+        'Download Parakeet V3 before using this engine.',
+      );
+    }
     if (this.stats.ready && this.modelPath === modelPath) return this.diagnostics();
     while (this.startPromise) {
       if (this.startModelPath === modelPath) return this.startPromise;
       const pendingStart = this.startPromise;
       try { await pendingStart; } catch {}
-      if (signal?.aborted) throw new Error('Transcription cancelled.');
+      if (signal?.aborted) {
+        throw transcriptionError('CANCELLED', 'Transcription cancelled.');
+      }
       if (this.stats.ready && this.modelPath === modelPath) return this.diagnostics();
     }
     const startPromise = this.#start(
@@ -84,18 +95,29 @@ class OnDeviceTranscriber {
   async #start(modelPath, signal, requireModelProfile, trustedManifestSha256) {
     this.dispose();
     const executable = this.resolveExecutable?.();
-    if (!executable) throw new Error('The bundled local transcription engine is missing.');
+    if (!executable) {
+      throw transcriptionError(
+        'RUNTIME_MISSING',
+        'The bundled local transcription engine is missing.',
+      );
+    }
 
     const child = this.spawnProcess(executable, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
     let stderr = '';
     child.stderr?.on('data', (chunk) => { stderr = (stderr + chunk.toString()).slice(-8_000); });
-    child.once('error', (error) => this.#failPending(error));
+    child.once('error', (error) => this.#failPending(transcriptionError(
+      'ENGINE_CRASHED',
+      `Local transcription engine could not start: ${error.message || error}`,
+    )));
     child.once('exit', (code) => {
       if (this.child !== child) return;
       this.child = null;
       this.stats.ready = false;
-      this.#failPending(new Error(`Local transcription engine exited ${code}: ${stderr.trim() || 'no error output'}`));
+      this.#failPending(transcriptionError(
+        'ENGINE_CRASHED',
+        `Local transcription engine exited ${code}: ${stderr.trim() || 'no error output'}`,
+      ));
     });
 
     this.lines = readline.createInterface({ input: child.stdout });
@@ -106,7 +128,10 @@ class OnDeviceTranscriber {
         if (!response.ok) this.#failPending(new TranscriptionError(response));
         else this.#resolvePending(response);
       } catch (error) {
-        this.#failPending(new Error(`Invalid response from local transcription engine: ${error.message}`));
+        this.#failPending(transcriptionError(
+          'INTERNAL',
+          `Invalid response from local transcription engine: ${error.message}`,
+        ));
       }
     });
 
@@ -132,9 +157,14 @@ class OnDeviceTranscriber {
 
   async transcribeDetailed(audioPath, settings, { signal } = {}) {
     if (!parakeetSupportsLanguage(settings?.language)) {
-      throw new Error('Parakeet V3 does not support the selected language. Choose Whisper for broader language support.');
+      throw transcriptionError(
+        'LANGUAGE_UNSUPPORTED',
+        'Parakeet V3 does not support the selected language. Choose Whisper for broader language support.',
+      );
     }
-    if (signal?.aborted) throw new Error('Transcription cancelled.');
+    if (signal?.aborted) {
+      throw transcriptionError('CANCELLED', 'Transcription cancelled.');
+    }
     await this.prepare(settings, { signal });
     const response = await this.#request({
       action: 'transcribe',
@@ -155,22 +185,40 @@ class OnDeviceTranscriber {
   }
 
   #request(message, { signal, timeoutMs } = {}) {
-    if (!this.child?.stdin?.writable) return Promise.reject(new Error('Local transcription engine is not running.'));
-    if (this.pending) return Promise.reject(new Error('Local transcription engine is busy.'));
+    if (!this.child?.stdin?.writable) {
+      return Promise.reject(transcriptionError(
+        'ENGINE_CRASHED',
+        'Local transcription engine is not running.',
+      ));
+    }
+    if (this.pending) {
+      return Promise.reject(transcriptionError(
+        'ENGINE_BUSY',
+        'Local transcription engine is busy.',
+      ));
+    }
     return new Promise((resolve, reject) => {
       const abort = () => {
-        this.#failPending(new Error('Transcription cancelled.'));
+        this.#failPending(transcriptionError('CANCELLED', 'Transcription cancelled.'));
         this.#terminateChild();
       };
       const timer = timeoutMs ? setTimeout(() => {
-        this.#failPending(new Error('Local transcription engine timed out.'));
+        this.#failPending(transcriptionError(
+          'TIMED_OUT',
+          'Local transcription engine timed out.',
+        ));
         this.#terminateChild();
       }, timeoutMs) : null;
       this.pending = { resolve, reject, timer, cleanup: () => signal?.removeEventListener('abort', abort) };
       if (signal?.aborted) return abort();
       signal?.addEventListener('abort', abort, { once: true });
       this.child.stdin.write(`${JSON.stringify(message)}\n`, (error) => {
-        if (error) this.#failPending(error);
+        if (error) {
+          this.#failPending(transcriptionError(
+            'ENGINE_CRASHED',
+            `Local transcription engine request failed: ${error.message || error}`,
+          ));
+        }
       });
     }).catch((error) => {
       this.stats.lastError = error.message || String(error);
@@ -211,7 +259,11 @@ class OnDeviceTranscriber {
     this.child = null;
     this.stats.ready = false;
     this.modelPath = '';
-    this.#failPending(new Error('Local transcription engine stopped.'));
+    this.#failPending(transcriptionError(
+      'DISPOSED',
+      'Local transcription engine stopped.',
+      false,
+    ));
     try { this.lines?.close(); } catch {}
     this.lines = null;
     try { child?.stdin?.end(`${JSON.stringify({ action: 'shutdown' })}\n`); } catch {}
@@ -249,6 +301,9 @@ class LocalTranscriber {
   async transcribe(input, options = {}) {
     this.#assertModelTrust();
     const audioPath = typeof input === 'string' ? input : input?.path;
+    if (!String(audioPath || '').trim()) {
+      throw transcriptionError('AUDIO_INVALID', 'A local audio file path is required.');
+    }
     return this.adapter.transcribeDetailed(
       audioPath,
       {

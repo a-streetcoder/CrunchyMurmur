@@ -70,3 +70,18 @@ test('default-first package API requires an authenticated model manifest', async
       && error.recoverable === false,
   );
 });
+
+test('default-first package API rejects malformed audio input with a stable code', async () => {
+  const transcriber = createLocalTranscriber({
+    modelDirectory: 'model',
+    trustedManifestSha256: 'digest',
+    resolveExecutable: () => 'helper',
+  });
+
+  await assert.rejects(
+    transcriber.transcribe({}),
+    (error) => error instanceof TranscriptionError
+      && error.code === 'AUDIO_INVALID'
+      && error.recoverable === true,
+  );
+});

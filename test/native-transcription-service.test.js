@@ -69,7 +69,12 @@ test('native transcription abort terminates an in-flight helper request', async 
   const pending = service.transcribe('audio.wav', { parakeetModelPath: 'model', language: 'en' }, { signal: controller.signal });
   await new Promise((resolve) => setImmediate(resolve));
   controller.abort();
-  await assert.rejects(pending, /cancelled/i);
+  await assert.rejects(
+    pending,
+    (error) => error.code === 'CANCELLED'
+      && error.recoverable === true
+      && /cancelled/i.test(error.message),
+  );
   assert.equal(child.killed, true);
 });
 
@@ -82,7 +87,9 @@ test('native transcription times out and restarts an unresponsive helper', async
   });
   await assert.rejects(
     service.transcribe('audio.wav', { parakeetModelPath: 'model', language: 'en' }),
-    /timed out/i,
+    (error) => error.code === 'TIMED_OUT'
+      && error.recoverable === true
+      && /timed out/i.test(error.message),
   );
   assert.equal(child.killed, true);
 });
