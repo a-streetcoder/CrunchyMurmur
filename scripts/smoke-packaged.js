@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { removeTemporaryDirectory } = require('./smoke-cleanup');
 
 const executable = process.argv[2];
 if (!executable || !fs.existsSync(executable)) {
@@ -280,7 +281,7 @@ async function evaluate(target, expression) {
   } finally {
     child.kill();
     await delay(500);
-    fs.rmSync(userData, { recursive: true, force: true });
+    await removeTemporaryDirectory(userData);
   }
 })().catch((error) => {
   console.error(error.message || error);

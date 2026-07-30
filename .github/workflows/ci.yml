@@ -33,7 +33,10 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: cargo test --locked --manifest-path native/transcriber/Cargo.toml
-      - run: npm audit --audit-level=high
+      # Runtime dependencies ship in the application and remain release
+      # blocking. Build-only dependency changes are covered by the dedicated
+      # dependency-review job above.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run release:check
       - name: Validate Unix source bootstrap
         if: runner.os != 'Windows'
