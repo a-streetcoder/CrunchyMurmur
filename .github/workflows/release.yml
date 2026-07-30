@@ -32,7 +32,9 @@ jobs:
       - run: npm run build:editor
       - run: npm run check
       - run: cargo test --locked --manifest-path native/transcriber/Cargo.toml
-      - run: npm audit --audit-level=high
+      # Audit the dependencies shipped to users. Development/build dependency
+      # changes are reviewed on pull requests by dependency-review.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run release:check
 
   windows:
