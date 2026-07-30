@@ -330,6 +330,7 @@ Every adapter maps native failures to the same codes. Applications must branch o
 |---|---|---:|
 | `MODEL_NOT_FOUND` | Required model assets are absent | Yes |
 | `MODEL_INVALID` | Manifest, file or checksum validation failed | Yes |
+| `MODEL_UNTRUSTED` | Manifest digest is not authenticated by the host trust policy | No |
 | `MODEL_UNSUPPORTED` | Model and engine versions are incompatible | Yes |
 | `RUNTIME_MISSING` | Native runtime is not installed or packaged | Yes |
 | `RUNTIME_INCOMPATIBLE` | Runtime does not support this platform or architecture | No |
