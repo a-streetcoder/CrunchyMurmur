@@ -56,3 +56,17 @@ test('package preserves stable native engine errors', async () => {
       && error.recoverable === true,
   );
 });
+
+test('default-first package API requires an authenticated model manifest', async () => {
+  const transcriber = createLocalTranscriber({
+    modelDirectory: 'model',
+    resolveExecutable: () => 'helper',
+  });
+
+  await assert.rejects(
+    transcriber.prepare(),
+    (error) => error instanceof TranscriptionError
+      && error.code === 'MODEL_UNTRUSTED'
+      && error.recoverable === false,
+  );
+});

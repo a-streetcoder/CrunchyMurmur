@@ -1,5 +1,5 @@
-use serde::Deserialize;
 use semver::Version;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::error::Error;
 use std::fmt;
@@ -18,6 +18,7 @@ const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub enum EngineErrorCode {
     ModelNotFound,
     ModelInvalid,
+    ModelUntrusted,
     ModelNotPrepared,
     AudioInvalid,
     InferenceFailed,
@@ -28,6 +29,7 @@ impl EngineErrorCode {
         match self {
             Self::ModelNotFound => "MODEL_NOT_FOUND",
             Self::ModelInvalid => "MODEL_INVALID",
+            Self::ModelUntrusted => "MODEL_UNTRUSTED",
             Self::ModelNotPrepared => "MODEL_NOT_PREPARED",
             Self::AudioInvalid => "AUDIO_INVALID",
             Self::InferenceFailed => "INFERENCE_FAILED",
@@ -112,6 +114,20 @@ pub struct ModelProfile {
 
 impl ModelProfile {
     pub fn load(directory: &Path) -> Result<Self, EngineError> {
+        Self::load_with_trust(directory, None)
+    }
+
+    pub fn load_trusted(
+        directory: &Path,
+        trusted_manifest_sha256: &str,
+    ) -> Result<Self, EngineError> {
+        Self::load_with_trust(directory, Some(trusted_manifest_sha256))
+    }
+
+    fn load_with_trust(
+        directory: &Path,
+        trusted_manifest_sha256: Option<&str>,
+    ) -> Result<Self, EngineError> {
         let root = directory.canonicalize().map_err(|_| {
             EngineError::new(
                 EngineErrorCode::ModelNotFound,
@@ -120,14 +136,24 @@ impl ModelProfile {
             )
         })?;
         let manifest_path = root.join("crunchymurmur-model.json");
-        let manifest = fs::read_to_string(&manifest_path).map_err(|_| {
+        let manifest = fs::read(&manifest_path).map_err(|_| {
             EngineError::new(
                 EngineErrorCode::ModelNotFound,
                 "Model Profile manifest was not found.",
                 true,
             )
         })?;
-        let mut profile: Self = serde_json::from_str(&manifest).map_err(|_| {
+        if let Some(expected) = trusted_manifest_sha256 {
+            let actual = format!("{:x}", Sha256::digest(&manifest));
+            if !actual.eq_ignore_ascii_case(expected.trim()) {
+                return Err(EngineError::new(
+                    EngineErrorCode::ModelUntrusted,
+                    "Model Profile manifest is not trusted by this host.",
+                    false,
+                ));
+            }
+        }
+        let mut profile: Self = serde_json::from_slice(&manifest).map_err(|_| {
             EngineError::new(
                 EngineErrorCode::ModelInvalid,
                 "Model Profile manifest is not valid JSON.",
@@ -260,6 +286,7 @@ impl ModelProfile {
 pub struct OnDeviceEngine {
     parakeet: Option<ParakeetModel>,
     model_path: Option<PathBuf>,
+    trusted_manifest_sha256: Option<String>,
     last_load_ms: Option<u128>,
 }
 
@@ -274,6 +301,7 @@ impl OnDeviceEngine {
         Self {
             parakeet: None,
             model_path: None,
+            trusted_manifest_sha256: None,
             last_load_ms: None,
         }
     }
@@ -306,6 +334,7 @@ impl OnDeviceEngine {
         let load_ms = started.elapsed().as_millis();
         self.parakeet = Some(model);
         self.model_path = Some(model_path.to_path_buf());
+        self.trusted_manifest_sha256 = None;
         self.last_load_ms = Some(load_ms);
         Ok(EngineInfo {
             load_ms,
@@ -322,6 +351,27 @@ impl OnDeviceEngine {
         }
         ModelProfile::load(model_directory)?;
         self.prepare(model_directory)
+    }
+
+    pub fn prepare_trusted_profile(
+        &mut self,
+        model_directory: &Path,
+        trusted_manifest_sha256: &str,
+    ) -> Result<EngineInfo, EngineError> {
+        let trusted_digest = trusted_manifest_sha256.trim().to_ascii_lowercase();
+        if self.model_path.as_deref() == Some(model_directory)
+            && self.parakeet.is_some()
+            && self.trusted_manifest_sha256.as_deref() == Some(trusted_digest.as_str())
+        {
+            return Ok(EngineInfo {
+                load_ms: 0,
+                reused: true,
+            });
+        }
+        ModelProfile::load_trusted(model_directory, trusted_manifest_sha256)?;
+        let info = self.prepare(model_directory)?;
+        self.trusted_manifest_sha256 = Some(trusted_digest);
+        Ok(info)
     }
 
     pub fn transcribe_file(&mut self, audio_path: &Path) -> Result<Transcript, EngineError> {

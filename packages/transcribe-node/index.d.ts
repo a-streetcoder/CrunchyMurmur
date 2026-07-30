@@ -1,6 +1,7 @@
 export type TranscriptionErrorCode =
   | 'MODEL_NOT_FOUND'
   | 'MODEL_INVALID'
+  | 'MODEL_UNTRUSTED'
   | 'MODEL_NOT_PREPARED'
   | 'AUDIO_INVALID'
   | 'INFERENCE_FAILED'
@@ -10,6 +11,7 @@ export interface TranscriptionSettings {
   parakeetModelPath: string;
   language?: string;
   requireModelProfile?: boolean;
+  trustedManifestSha256?: string;
 }
 
 export interface TranscriptionDiagnostics {
@@ -43,6 +45,8 @@ export interface Transcript {
 export interface LocalTranscriberOptions extends Omit<OnDeviceTranscriberOptions, 'resolveExecutable'> {
   modelDirectory: string;
   resolveExecutable: () => string;
+  trustedManifestSha256?: string;
+  allowUntrustedProfile?: boolean;
 }
 
 export class TranscriptionError extends Error {

@@ -48,7 +48,11 @@ class OnDeviceTranscriber {
     return { ...this.stats, executablePath: this.resolveExecutable?.() || '' };
   }
 
-  async prepare({ parakeetModelPath, requireModelProfile = false }, { signal } = {}) {
+  async prepare({
+    parakeetModelPath,
+    requireModelProfile = false,
+    trustedManifestSha256 = '',
+  }, { signal } = {}) {
     const modelPath = String(parakeetModelPath || '').trim();
     if (!modelPath) throw new Error('Download Parakeet V3 before using this engine.');
     if (this.stats.ready && this.modelPath === modelPath) return this.diagnostics();
@@ -59,7 +63,12 @@ class OnDeviceTranscriber {
       if (signal?.aborted) throw new Error('Transcription cancelled.');
       if (this.stats.ready && this.modelPath === modelPath) return this.diagnostics();
     }
-    const startPromise = this.#start(modelPath, signal, requireModelProfile);
+    const startPromise = this.#start(
+      modelPath,
+      signal,
+      requireModelProfile,
+      trustedManifestSha256,
+    );
     this.startPromise = startPromise;
     this.startModelPath = modelPath;
     try {
@@ -72,7 +81,7 @@ class OnDeviceTranscriber {
     }
   }
 
-  async #start(modelPath, signal, requireModelProfile) {
+  async #start(modelPath, signal, requireModelProfile, trustedManifestSha256) {
     this.dispose();
     const executable = this.resolveExecutable?.();
     if (!executable) throw new Error('The bundled local transcription engine is missing.');
@@ -105,6 +114,7 @@ class OnDeviceTranscriber {
       action: 'load',
       modelPath,
       requireProfile: Boolean(requireModelProfile),
+      trustedManifestSha256,
     }, { signal, timeoutMs: this.loadTimeoutMs });
     this.modelPath = modelPath;
     this.stats.ready = true;
@@ -131,6 +141,7 @@ class OnDeviceTranscriber {
       modelPath: this.modelPath,
       audioPath,
       requireProfile: Boolean(settings?.requireModelProfile),
+      trustedManifestSha256: settings?.trustedManifestSha256 || '',
     }, { signal, timeoutMs: this.inferenceTimeoutMs });
     this.stats.lastInferenceMs = response.inferenceMs ?? null;
     this.stats.lastError = '';
@@ -211,28 +222,39 @@ class OnDeviceTranscriber {
 }
 
 class LocalTranscriber {
-  constructor({ modelDirectory, ...options } = {}) {
+  constructor({
+    modelDirectory,
+    trustedManifestSha256 = '',
+    allowUntrustedProfile = false,
+    ...options
+  } = {}) {
     this.modelDirectory = String(modelDirectory || '').trim();
+    this.trustedManifestSha256 = String(trustedManifestSha256 || '').trim();
+    this.allowUntrustedProfile = allowUntrustedProfile === true;
     this.adapter = new OnDeviceTranscriber(options);
   }
 
-  prepare({ signal } = {}) {
+  async prepare({ signal } = {}) {
+    this.#assertModelTrust();
     return this.adapter.prepare(
       {
         parakeetModelPath: this.modelDirectory,
         requireModelProfile: true,
+        trustedManifestSha256: this.trustedManifestSha256,
       },
       { signal },
     );
   }
 
-  transcribe(input, options = {}) {
+  async transcribe(input, options = {}) {
+    this.#assertModelTrust();
     const audioPath = typeof input === 'string' ? input : input?.path;
     return this.adapter.transcribeDetailed(
       audioPath,
       {
         parakeetModelPath: this.modelDirectory,
         requireModelProfile: true,
+        trustedManifestSha256: this.trustedManifestSha256,
         language: options.language || 'auto',
       },
       { signal: options.signal },
@@ -245,6 +267,15 @@ class LocalTranscriber {
 
   async dispose() {
     this.adapter.dispose();
+  }
+
+  #assertModelTrust() {
+    if (this.trustedManifestSha256 || this.allowUntrustedProfile) return;
+    throw new TranscriptionError({
+      error: 'An authenticated Model Profile manifest digest is required.',
+      errorCode: 'MODEL_UNTRUSTED',
+      recoverable: false,
+    });
   }
 }
 

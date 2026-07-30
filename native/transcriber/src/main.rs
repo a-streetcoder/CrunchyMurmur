@@ -13,6 +13,8 @@ struct Request {
     audio_path: String,
     #[serde(default)]
     require_profile: bool,
+    #[serde(default)]
+    trusted_manifest_sha256: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -99,7 +101,10 @@ impl Runtime {
             }
             "load" => {
                 let path = PathBuf::from(request.model_path);
-                let result = if request.require_profile {
+                let result = if !request.trusted_manifest_sha256.is_empty() {
+                    self.engine
+                        .prepare_trusted_profile(&path, &request.trusted_manifest_sha256)
+                } else if request.require_profile {
                     self.engine.prepare_profile(&path)
                 } else {
                     self.engine.prepare(&path)
@@ -118,7 +123,10 @@ impl Runtime {
             "transcribe" => {
                 let model_path = PathBuf::from(request.model_path);
                 let audio_path = PathBuf::from(request.audio_path);
-                let prepared = if request.require_profile {
+                let prepared = if !request.trusted_manifest_sha256.is_empty() {
+                    self.engine
+                        .prepare_trusted_profile(&model_path, &request.trusted_manifest_sha256)
+                } else if request.require_profile {
                     self.engine.prepare_profile(&model_path)
                 } else {
                     self.engine.prepare(&model_path)

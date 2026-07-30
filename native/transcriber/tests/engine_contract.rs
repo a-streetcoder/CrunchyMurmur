@@ -97,10 +97,41 @@ fn model_profiles_cannot_require_a_newer_engine() {
     )
     .unwrap();
 
-    let error = ModelProfile::load(&directory)
-        .expect_err("a future engine requirement must be rejected");
+    let error =
+        ModelProfile::load(&directory).expect_err("a future engine requirement must be rejected");
 
     assert_eq!(error.code(), EngineErrorCode::ModelInvalid);
     assert!(error.to_string().contains("newer"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn trusted_model_profiles_reject_an_unpinned_manifest() {
+    let directory = temporary_directory("untrusted-profile");
+    fs::write(directory.join("model.onnx"), b"model").unwrap();
+    fs::write(
+        directory.join("crunchymurmur-model.json"),
+        r#"{
+            "schemaVersion": 1,
+            "modelId": "parakeet-v3-int8",
+            "modelVersion": "1.0.0",
+            "engine": "parakeet",
+            "quantisation": "int8",
+            "languages": ["auto", "en"],
+            "files": [{
+                "path": "model.onnx",
+                "bytes": 5,
+                "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4"
+            }],
+            "minimumEngineVersion": "0.1.0"
+        }"#,
+    )
+    .unwrap();
+
+    let error = ModelProfile::load_trusted(&directory, &"0".repeat(64))
+        .expect_err("a manifest outside the trusted release index must be rejected");
+
+    assert_eq!(error.code(), EngineErrorCode::ModelUntrusted);
+    assert!(!error.recoverable());
     fs::remove_dir_all(directory).unwrap();
 }

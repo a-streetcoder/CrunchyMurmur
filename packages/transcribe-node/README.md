@@ -13,6 +13,7 @@ const { createLocalTranscriber } = require('@crunchymurmur/transcribe-node');
 const transcriber = createLocalTranscriber({
   resolveExecutable: () => '/path/to/crunchymurmur-transcriber',
   modelDirectory: '/path/to/parakeet-model',
+  trustedManifestSha256: verifiedRelease.models.parakeetV3.manifestSha256,
 });
 
 await transcriber.prepare();
@@ -28,3 +29,7 @@ console.log(result.text, result.outcome);
 
 The adapter is not published yet. Its API remains provisional until the first
 standalone SDK preview.
+
+Production hosts must authenticate the Model Profile manifest digest through a
+signed release index or signed application configuration. Development tools
+may set `allowUntrustedProfile: true` explicitly; release builds should not.
