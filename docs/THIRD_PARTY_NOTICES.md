@@ -14,6 +14,14 @@ The optional Parakeet V3 model is downloaded from the [ONNX export](https://hugg
 
 The macOS Intel package includes [Microsoft ONNX Runtime](https://github.com/microsoft/onnxruntime), Copyright Microsoft Corporation, licensed under the MIT License. The applicable licence text is included with the distributed application.
 
+## RustCrypto SHA-2
+
+The native engine uses the [RustCrypto SHA-2](https://github.com/RustCrypto/hashes) implementation to verify local Model Profile assets. It is dual-licensed under the MIT License and Apache License 2.0.
+
+## Rust semver
+
+The native engine uses the [Rust semver](https://github.com/dtolnay/semver) crate to enforce Model Profile compatibility. It is dual-licensed under the MIT License and Apache License 2.0.
+
 ## Muya
 
 Muya is the Markdown editor extracted from [MarkText](https://github.com/marktext/marktext) and distributed as [`@muyajs/core`](https://www.npmjs.com/package/@muyajs/core).

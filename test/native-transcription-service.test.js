@@ -35,6 +35,33 @@ test('Parakeet directs unsupported spoken languages to Whisper', () => {
   }
 });
 
+test('native transcription exposes stable engine errors to host applications', async () => {
+  const child = fakeHelper();
+  child.stdin.write = (line, callback) => {
+    const request = JSON.parse(line);
+    if (request.action === 'load') {
+      child.stdout.write(`${JSON.stringify({
+        ok: false,
+        error: 'Parakeet model directory was not found.',
+        errorCode: 'MODEL_NOT_FOUND',
+        recoverable: true,
+      })}\n`);
+    }
+    callback?.();
+  };
+  const service = new NativeTranscriptionService({
+    resolveExecutable: () => 'helper',
+    spawnProcess: () => child,
+  });
+
+  await assert.rejects(
+    service.prepare({ parakeetModelPath: 'missing' }),
+    (error) => error.code === 'MODEL_NOT_FOUND'
+      && error.recoverable === true
+      && /not found/i.test(error.message),
+  );
+});
+
 test('native transcription abort terminates an in-flight helper request', async () => {
   const child = fakeHelper();
   const service = new NativeTranscriptionService({ resolveExecutable: () => 'helper', spawnProcess: () => child });
