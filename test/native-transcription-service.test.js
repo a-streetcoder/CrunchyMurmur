@@ -114,3 +114,79 @@ test('concurrent preparation never reuses a different model load', async () => {
   assert.equal(children.length, 0);
   service.dispose();
 });
+
+test('failed model preparation terminates its native helper', async () => {
+  const child = fakeHelper();
+  child.stdin.write = (_line, callback) => {
+    child.stdout.write(`${JSON.stringify({
+      ok: false,
+      error: 'Model is invalid.',
+      errorCode: 'MODEL_INVALID',
+      recoverable: true,
+    })}\n`);
+    callback?.();
+  };
+  const service = new NativeTranscriptionService({
+    resolveExecutable: () => 'helper',
+    spawnProcess: () => child,
+  });
+
+  await assert.rejects(
+    service.prepare({ parakeetModelPath: 'broken-model' }),
+    (error) => error.code === 'MODEL_INVALID',
+  );
+  const killedAfterFailure = child.killed;
+  const readyAfterFailure = service.diagnostics().ready;
+  service.dispose();
+  assert.equal(killedAfterFailure, true);
+  assert.equal(readyAfterFailure, false);
+});
+
+test('a stale helper error cannot fail a replacement helper request', async () => {
+  const first = fakeHelper();
+  const second = fakeHelper();
+  const children = [first, second];
+  const service = new NativeTranscriptionService({
+    resolveExecutable: () => 'helper',
+    spawnProcess: () => children.shift(),
+  });
+
+  const firstLoad = service.prepare({ parakeetModelPath: 'model-a' });
+  first.stdout.write(`${JSON.stringify({ ok: true, loadMs: 1 })}\n`);
+  await firstLoad;
+
+  const secondLoad = service.prepare({ parakeetModelPath: 'model-b' });
+  await new Promise((resolve) => setImmediate(resolve));
+  first.emit('error', new Error('late error from replaced helper'));
+  second.stdout.write(`${JSON.stringify({ ok: true, loadMs: 1 })}\n`);
+
+  const result = await secondLoad.catch((error) => error);
+  service.dispose();
+  assert.equal(result.modelPath, 'model-b');
+});
+
+test('busy failures are retained in diagnostics', async () => {
+  const child = fakeHelper();
+  const service = new NativeTranscriptionService({
+    resolveExecutable: () => 'helper',
+    spawnProcess: () => child,
+  });
+  await service.prepare({ parakeetModelPath: 'model' });
+
+  const first = service.transcribe(
+    'first.wav',
+    { parakeetModelPath: 'model', language: 'en' },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(
+    service.transcribe(
+      'second.wav',
+      { parakeetModelPath: 'model', language: 'en' },
+    ),
+    (error) => error.code === 'ENGINE_BUSY',
+  );
+  const lastError = service.diagnostics().lastError;
+  service.dispose();
+  await assert.rejects(first, (error) => error.code === 'DISPOSED');
+  assert.match(lastError, /busy/i);
+});

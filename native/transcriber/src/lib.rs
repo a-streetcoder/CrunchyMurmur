@@ -14,6 +14,7 @@ use transcribe_rs::{SpeechModel, TranscribeOptions};
 
 const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Stable machine-readable failure categories exposed by the native engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineErrorCode {
     ModelNotFound,
@@ -25,6 +26,7 @@ pub enum EngineErrorCode {
 }
 
 impl EngineErrorCode {
+    /// Returns the cross-adapter string representation of this error code.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ModelNotFound => "MODEL_NOT_FOUND",
@@ -37,6 +39,7 @@ impl EngineErrorCode {
     }
 }
 
+/// A privacy-safe engine failure with a stable code and recovery hint.
 #[derive(Debug)]
 pub struct EngineError {
     code: EngineErrorCode,
@@ -53,10 +56,12 @@ impl EngineError {
         }
     }
 
+    /// Returns the stable category applications should branch on.
     pub fn code(&self) -> EngineErrorCode {
         self.code
     }
 
+    /// Reports whether retrying after user or host action may succeed.
     pub fn recoverable(&self) -> bool {
         self.recoverable
     }
@@ -70,22 +75,30 @@ impl fmt::Display for EngineError {
 
 impl Error for EngineError {}
 
+/// Model preparation timing and cache reuse information.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EngineInfo {
+    /// Time spent loading the model, in milliseconds.
     pub load_ms: u128,
+    /// Whether an already prepared model instance was reused.
     pub reused: bool,
 }
 
+/// Successful transcription classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TranscriptOutcome {
     Speech,
     NoSpeech,
 }
 
+/// A successful final transcription result.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Transcript {
+    /// Normalised transcript text, empty for a no-speech outcome.
     pub text: String,
+    /// Whether usable speech was detected.
     pub outcome: TranscriptOutcome,
+    /// Time spent running inference, in milliseconds.
     pub inference_ms: u128,
 }
 
@@ -97,6 +110,7 @@ struct ModelFile {
     sha256: String,
 }
 
+/// A validated description of the files and compatibility of a local model.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelProfile {
@@ -113,10 +127,12 @@ pub struct ModelProfile {
 }
 
 impl ModelProfile {
+    /// Loads and validates a profile without applying a host trust policy.
     pub fn load(directory: &Path) -> Result<Self, EngineError> {
         Self::load_with_trust(directory, None)
     }
 
+    /// Loads a profile whose manifest must match a host-authenticated digest.
     pub fn load_trusted(
         directory: &Path,
         trusted_manifest_sha256: &str,
@@ -270,19 +286,23 @@ impl ModelProfile {
         Ok(())
     }
 
+    /// Returns the stable model identifier declared by the profile.
     pub fn model_id(&self) -> &str {
         &self.model_id
     }
 
+    /// Returns the semantic model version declared by the profile.
     pub fn model_version(&self) -> &str {
         &self.model_version
     }
 
+    /// Returns the canonical directory containing the validated model files.
     pub fn directory(&self) -> &Path {
         &self.directory
     }
 }
 
+/// Stateful on-device engine that keeps one Parakeet model warm for reuse.
 pub struct OnDeviceEngine {
     parakeet: Option<ParakeetModel>,
     model_path: Option<PathBuf>,
@@ -297,6 +317,7 @@ impl Default for OnDeviceEngine {
 }
 
 impl OnDeviceEngine {
+    /// Creates an unloaded engine without accessing the filesystem.
     pub fn new() -> Self {
         Self {
             parakeet: None,
@@ -306,6 +327,7 @@ impl OnDeviceEngine {
         }
     }
 
+    /// Loads a raw Parakeet model directory for trusted first-party hosts.
     pub fn prepare(&mut self, model_path: &Path) -> Result<EngineInfo, EngineError> {
         if self.model_path.as_deref() == Some(model_path) && self.parakeet.is_some() {
             return Ok(EngineInfo {
@@ -342,6 +364,7 @@ impl OnDeviceEngine {
         })
     }
 
+    /// Validates a Model Profile and prepares its model files.
     pub fn prepare_profile(&mut self, model_directory: &Path) -> Result<EngineInfo, EngineError> {
         if self.model_path.as_deref() == Some(model_directory) && self.parakeet.is_some() {
             return Ok(EngineInfo {
@@ -353,6 +376,7 @@ impl OnDeviceEngine {
         self.prepare(model_directory)
     }
 
+    /// Validates an authenticated Model Profile and prepares its model files.
     pub fn prepare_trusted_profile(
         &mut self,
         model_directory: &Path,
@@ -374,6 +398,7 @@ impl OnDeviceEngine {
         Ok(info)
     }
 
+    /// Transcribes a local audio file with the prepared model.
     pub fn transcribe_file(&mut self, audio_path: &Path) -> Result<Transcript, EngineError> {
         if !audio_path.is_file() {
             return Err(EngineError::new(
@@ -411,10 +436,12 @@ impl OnDeviceEngine {
         })
     }
 
+    /// Reports whether a model is currently loaded.
     pub fn is_prepared(&self) -> bool {
         self.parakeet.is_some()
     }
 
+    /// Returns the duration of the latest successful model load.
     pub fn last_load_ms(&self) -> Option<u128> {
         self.last_load_ms
     }

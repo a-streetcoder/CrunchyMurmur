@@ -106,10 +106,13 @@ class OnDeviceTranscriber {
     this.child = child;
     let stderr = '';
     child.stderr?.on('data', (chunk) => { stderr = (stderr + chunk.toString()).slice(-8_000); });
-    child.once('error', (error) => this.#failPending(transcriptionError(
-      'ENGINE_CRASHED',
-      `Local transcription engine could not start: ${error.message || error}`,
-    )));
+    child.once('error', (error) => {
+      if (this.child !== child) return;
+      this.#failPending(transcriptionError(
+        'ENGINE_CRASHED',
+        `Local transcription engine could not start: ${error.message || error}`,
+      ));
+    });
     child.once('exit', (code) => {
       if (this.child !== child) return;
       this.child = null;
@@ -135,12 +138,18 @@ class OnDeviceTranscriber {
       }
     });
 
-    const response = await this.#request({
-      action: 'load',
-      modelPath,
-      requireProfile: Boolean(requireModelProfile),
-      trustedManifestSha256,
-    }, { signal, timeoutMs: this.loadTimeoutMs });
+    let response;
+    try {
+      response = await this.#request({
+        action: 'load',
+        modelPath,
+        requireProfile: Boolean(requireModelProfile),
+        trustedManifestSha256,
+      }, { signal, timeoutMs: this.loadTimeoutMs });
+    } catch (error) {
+      if (this.child === child) this.#terminateChild();
+      throw error;
+    }
     this.modelPath = modelPath;
     this.stats.ready = true;
     this.stats.modelPath = modelPath;
@@ -186,13 +195,13 @@ class OnDeviceTranscriber {
 
   #request(message, { signal, timeoutMs } = {}) {
     if (!this.child?.stdin?.writable) {
-      return Promise.reject(transcriptionError(
+      return this.#rejectRequest(transcriptionError(
         'ENGINE_CRASHED',
         'Local transcription engine is not running.',
       ));
     }
     if (this.pending) {
-      return Promise.reject(transcriptionError(
+      return this.#rejectRequest(transcriptionError(
         'ENGINE_BUSY',
         'Local transcription engine is busy.',
       ));
@@ -244,10 +253,16 @@ class OnDeviceTranscriber {
     resolve(response);
   }
 
+  #rejectRequest(error) {
+    this.stats.lastError = error.message || String(error);
+    return Promise.reject(error);
+  }
+
   #terminateChild() {
     const child = this.child;
     this.child = null;
     this.stats.ready = false;
+    this.stats.modelPath = '';
     this.modelPath = '';
     try { this.lines?.close(); } catch {}
     this.lines = null;
@@ -258,6 +273,7 @@ class OnDeviceTranscriber {
     const child = this.child;
     this.child = null;
     this.stats.ready = false;
+    this.stats.modelPath = '';
     this.modelPath = '';
     this.#failPending(transcriptionError(
       'DISPOSED',

@@ -57,7 +57,7 @@ export interface LocalTranscriberOptions extends Omit<OnDeviceTranscriberOptions
 }
 
 export class TranscriptionError extends Error {
-  code: TranscriptionErrorCode | string;
+  code: TranscriptionErrorCode | (string & {});
   recoverable: boolean;
 }
 

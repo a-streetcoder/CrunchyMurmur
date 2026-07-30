@@ -1,6 +1,7 @@
 {
   "name": "@crunchymurmur/transcribe-node",
   "version": "0.0.0-development",
+  "private": true,
   "description": "Provisional Node.js and Electron adapter for CrunchyMurmur's on-device transcription engine.",
   "license": "MIT",
   "main": "index.js",

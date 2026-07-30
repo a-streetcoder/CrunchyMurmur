@@ -13,6 +13,24 @@ fn temporary_directory(name: &str) -> PathBuf {
     directory
 }
 
+fn manifest_json(model_id: &str, minimum_engine_version: &str) -> String {
+    serde_json::json!({
+        "schemaVersion": 1,
+        "modelId": model_id,
+        "modelVersion": "1.0.0",
+        "engine": "parakeet",
+        "quantisation": "int8",
+        "languages": ["auto", "en"],
+        "files": [{
+            "path": "model.onnx",
+            "bytes": 5,
+            "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4"
+        }],
+        "minimumEngineVersion": minimum_engine_version
+    })
+    .to_string()
+}
+
 #[test]
 fn missing_model_is_reported_through_the_public_engine_contract() {
     let mut engine = OnDeviceEngine::new();
@@ -35,20 +53,7 @@ fn model_profile_verifies_local_assets_before_the_engine_uses_them() {
     fs::write(directory.join("model.onnx"), b"model").unwrap();
     fs::write(
         directory.join("crunchymurmur-model.json"),
-        r#"{
-            "schemaVersion": 1,
-            "modelId": "parakeet-v3-int8",
-            "modelVersion": "1.0.0",
-            "engine": "parakeet",
-            "quantisation": "int8",
-            "languages": ["auto", "en"],
-            "files": [{
-                "path": "model.onnx",
-                "bytes": 5,
-                "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4"
-            }],
-            "minimumEngineVersion": "0.1.0"
-        }"#,
+        manifest_json("parakeet-v3-int8", "0.1.0"),
     )
     .unwrap();
 
@@ -80,20 +85,7 @@ fn model_profiles_cannot_require_a_newer_engine() {
     fs::write(directory.join("model.onnx"), b"model").unwrap();
     fs::write(
         directory.join("crunchymurmur-model.json"),
-        r#"{
-            "schemaVersion": 1,
-            "modelId": "future-model",
-            "modelVersion": "1.0.0",
-            "engine": "parakeet",
-            "quantisation": "int8",
-            "languages": ["auto", "en"],
-            "files": [{
-                "path": "model.onnx",
-                "bytes": 5,
-                "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4"
-            }],
-            "minimumEngineVersion": "99.0.0"
-        }"#,
+        manifest_json("future-model", "99.0.0"),
     )
     .unwrap();
 
@@ -111,20 +103,7 @@ fn trusted_model_profiles_reject_an_unpinned_manifest() {
     fs::write(directory.join("model.onnx"), b"model").unwrap();
     fs::write(
         directory.join("crunchymurmur-model.json"),
-        r#"{
-            "schemaVersion": 1,
-            "modelId": "parakeet-v3-int8",
-            "modelVersion": "1.0.0",
-            "engine": "parakeet",
-            "quantisation": "int8",
-            "languages": ["auto", "en"],
-            "files": [{
-                "path": "model.onnx",
-                "bytes": 5,
-                "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4"
-            }],
-            "minimumEngineVersion": "0.1.0"
-        }"#,
+        manifest_json("parakeet-v3-int8", "0.1.0"),
     )
     .unwrap();
 

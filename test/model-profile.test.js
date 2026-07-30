@@ -29,3 +29,10 @@ test('Parakeet catalog metadata becomes a portable Model Profile', () => {
     minimumEngineVersion: '0.1.0',
   });
 });
+
+test('Model Profile generation rejects non-Parakeet catalog entries', () => {
+  assert.throws(
+    () => createModelProfileManifest({ family: 'whisper', files: [] }),
+    TypeError,
+  );
+});

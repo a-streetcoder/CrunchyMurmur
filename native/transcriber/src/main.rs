@@ -1,4 +1,4 @@
-use crunchymurmur_transcriber::{EngineError, OnDeviceEngine, TranscriptOutcome};
+use crunchymurmur_transcriber::{EngineError, EngineInfo, OnDeviceEngine, TranscriptOutcome};
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -88,6 +88,21 @@ impl Runtime {
         }
     }
 
+    fn prepare_for(
+        &mut self,
+        path: &PathBuf,
+        request: &Request,
+    ) -> Result<EngineInfo, EngineError> {
+        if !request.trusted_manifest_sha256.is_empty() {
+            self.engine
+                .prepare_trusted_profile(path, &request.trusted_manifest_sha256)
+        } else if request.require_profile {
+            self.engine.prepare_profile(path)
+        } else {
+            self.engine.prepare(path)
+        }
+    }
+
     fn handle(&mut self, request: Request) -> Response {
         match request.action.as_str() {
             "status" => {
@@ -100,15 +115,8 @@ impl Runtime {
                 response
             }
             "load" => {
-                let path = PathBuf::from(request.model_path);
-                let result = if !request.trusted_manifest_sha256.is_empty() {
-                    self.engine
-                        .prepare_trusted_profile(&path, &request.trusted_manifest_sha256)
-                } else if request.require_profile {
-                    self.engine.prepare_profile(&path)
-                } else {
-                    self.engine.prepare(&path)
-                };
+                let path = PathBuf::from(&request.model_path);
+                let result = self.prepare_for(&path, &request);
                 match result {
                     Ok(info) => {
                         self.model_path = Some(path.clone());
@@ -121,16 +129,9 @@ impl Runtime {
                 }
             }
             "transcribe" => {
-                let model_path = PathBuf::from(request.model_path);
-                let audio_path = PathBuf::from(request.audio_path);
-                let prepared = if !request.trusted_manifest_sha256.is_empty() {
-                    self.engine
-                        .prepare_trusted_profile(&model_path, &request.trusted_manifest_sha256)
-                } else if request.require_profile {
-                    self.engine.prepare_profile(&model_path)
-                } else {
-                    self.engine.prepare(&model_path)
-                };
+                let model_path = PathBuf::from(&request.model_path);
+                let audio_path = PathBuf::from(&request.audio_path);
+                let prepared = self.prepare_for(&model_path, &request);
                 if let Err(error) = prepared {
                     return Response::failure(&error);
                 }
