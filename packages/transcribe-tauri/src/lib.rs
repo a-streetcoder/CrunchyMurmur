@@ -203,7 +203,15 @@ impl TranscriberService {
             engine: OnDeviceEngine::new(),
             allowed_audio_roots: roots
                 .into_iter()
-                .filter_map(|root| root.canonicalize().ok())
+                .filter_map(|root| match root.canonicalize() {
+                    Ok(canonical) => Some(canonical),
+                    Err(error) => {
+                        eprintln!(
+                            "transcribe-tauri: audio root {root:?} is unavailable and will be denied: {error}"
+                        );
+                        None
+                    }
+                })
                 .collect(),
             model_directory: None,
             trusted_manifest_sha256: None,
