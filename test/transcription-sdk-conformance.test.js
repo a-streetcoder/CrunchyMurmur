@@ -155,6 +155,7 @@ test('Node adapter discovers an explicitly configured native runtime', (t) => {
       : 'crunchymurmur-transcriber',
   );
   fs.writeFileSync(executable, '');
+  if (process.platform !== 'win32') fs.chmodSync(executable, 0o755);
   const previous = process.env.CRUNCHYMURMUR_TRANSCRIBER_PATH;
   process.env.CRUNCHYMURMUR_TRANSCRIBER_PATH = executable;
   t.after(() => {
