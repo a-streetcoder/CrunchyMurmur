@@ -1,12 +1,12 @@
 # CrunchyMurmur Tauri transcription adapter
 
-This provisional Tauri 2 desktop plugin links CrunchyMurmur's Rust engine
+This alpha Tauri 2 desktop plugin links CrunchyMurmur's Rust engine
 directly into a Windows, macOS, or Linux application. It does not start a
 sidecar, capture a microphone, download models, send telemetry, or use a
 network after the host has installed a model.
 
-The crate and JavaScript package are private while the first preview release,
-artifact signing, and namespace ownership are prepared.
+The crate and JavaScript guest package are published together from an immutable
+`sdk-v<version>` tag after their shared release checks pass.
 
 The current native engine dependency requires Rust 1.88 or newer.
 
@@ -48,12 +48,11 @@ Then call the guest API:
 ```js
 import { createTranscriber } from '@crunchymurmur/transcribe-tauri';
 
-const transcriber = createTranscriber();
-
-await transcriber.prepare({
+const transcriber = createTranscriber({
   modelDirectory: applicationModelDirectory,
   trustedManifestSha256: verifiedRelease.models.parakeetV3.manifestSha256,
 });
+await transcriber.prepare();
 
 const result = await transcriber.transcribe(
   { path: recordedWavPath },
@@ -73,5 +72,5 @@ digest. Expose filesystem transcription commands only to trusted windows.
 - Model manifests and every declared model file are verified before loading.
 - Diagnostics read a lightweight snapshot without waiting for inference.
 - Disposal waits for active inference before releasing the model.
-- Cancellation, streaming PCM sessions, packaged model delivery, and public
-  crates.io/npm releases remain follow-up work.
+- Cancellation, streaming PCM sessions, and packaged model delivery remain
+  follow-up work.

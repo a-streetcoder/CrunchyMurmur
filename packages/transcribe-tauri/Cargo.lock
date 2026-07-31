@@ -347,7 +347,7 @@ checksum = "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17"
 
 [[package]]
 name = "crunchymurmur-transcriber"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "semver",
  "serde",
@@ -3019,7 +3019,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-crunchymurmur-transcribe"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "crunchymurmur-transcriber",
  "serde",

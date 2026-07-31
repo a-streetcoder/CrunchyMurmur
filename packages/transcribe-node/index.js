@@ -1,5 +1,8 @@
 const readline = require('readline');
 const { spawn } = require('child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const PARAKEET_LANGUAGES = new Set([
   'auto', 'bg', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'fi', 'fr', 'de', 'el', 'hu',
@@ -10,6 +13,28 @@ const INFERENCE_TIMEOUT_MS = 10 * 60 * 1000;
 
 function parakeetSupportsLanguage(language) {
   return PARAKEET_LANGUAGES.has(String(language || 'auto').toLowerCase());
+}
+
+function resolveTranscriberExecutable({
+  env = process.env,
+  platform = process.platform,
+  pathSeparator = path.delimiter,
+  homeDirectory = os.homedir(),
+} = {}) {
+  const configured = String(env.CRUNCHYMURMUR_TRANSCRIBER_PATH || '').trim();
+  if (configured && fs.existsSync(configured)) return configured;
+  const executable = platform === 'win32'
+    ? 'crunchymurmur-transcriber.exe'
+    : 'crunchymurmur-transcriber';
+  for (const directory of String(env.PATH || '').split(pathSeparator)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, executable);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  const cargoHome = String(env.CARGO_HOME || '').trim()
+    || path.join(homeDirectory, '.cargo');
+  const cargoRuntime = path.join(cargoHome, 'bin', executable);
+  return fs.existsSync(cargoRuntime) ? cargoRuntime : '';
 }
 
 class TranscriptionError extends Error {
@@ -26,7 +51,7 @@ function transcriptionError(errorCode, error, recoverable = true) {
 }
 
 class OnDeviceTranscriber {
-  constructor({ resolveExecutable, spawnProcess = spawn, logger = console, loadTimeoutMs = LOAD_TIMEOUT_MS, inferenceTimeoutMs = INFERENCE_TIMEOUT_MS } = {}) {
+  constructor({ resolveExecutable = resolveTranscriberExecutable, spawnProcess = spawn, logger = console, loadTimeoutMs = LOAD_TIMEOUT_MS, inferenceTimeoutMs = INFERENCE_TIMEOUT_MS } = {}) {
     this.resolveExecutable = resolveExecutable;
     this.spawnProcess = spawnProcess;
     this.logger = logger;
@@ -41,6 +66,10 @@ class OnDeviceTranscriber {
     this.stats = {
       backend: 'transcribe-rs',
       ready: false,
+      engineVersion: '',
+      modelId: '',
+      modelVersion: '',
+      reused: false,
       modelPath: '',
       lastLoadMs: null,
       lastInferenceMs: null,
@@ -64,7 +93,10 @@ class OnDeviceTranscriber {
         'Download Parakeet V3 before using this engine.',
       );
     }
-    if (this.stats.ready && this.modelPath === modelPath) return this.diagnostics();
+    if (this.stats.ready && this.modelPath === modelPath) {
+      this.stats.reused = true;
+      return this.diagnostics();
+    }
     while (this.startPromise) {
       if (this.startModelPath === modelPath) return this.startPromise;
       const pendingStart = this.startPromise;
@@ -72,7 +104,10 @@ class OnDeviceTranscriber {
       if (signal?.aborted) {
         throw transcriptionError('CANCELLED', 'Transcription cancelled.');
       }
-      if (this.stats.ready && this.modelPath === modelPath) return this.diagnostics();
+      if (this.stats.ready && this.modelPath === modelPath) {
+        this.stats.reused = true;
+        return this.diagnostics();
+      }
     }
     const startPromise = this.#start(
       modelPath,
@@ -152,6 +187,10 @@ class OnDeviceTranscriber {
     }
     this.modelPath = modelPath;
     this.stats.ready = true;
+    this.stats.engineVersion = String(response.engineVersion || '');
+    this.stats.modelId = String(response.modelId || '');
+    this.stats.modelVersion = String(response.modelVersion || '');
+    this.stats.reused = response.reused === true;
     this.stats.modelPath = modelPath;
     this.stats.lastLoadMs = response.loadMs ?? null;
     this.stats.lastError = '';
@@ -189,6 +228,7 @@ class OnDeviceTranscriber {
     return {
       text,
       outcome: response.outcome === 'no-speech' || !text ? 'no-speech' : 'speech',
+      inferenceMs: response.inferenceMs ?? 0,
       ...(settings?.language && settings.language !== 'auto' ? { language: settings.language } : {}),
     };
   }
@@ -304,7 +344,7 @@ class LocalTranscriber {
 
   async prepare({ signal } = {}) {
     this.#assertModelTrust();
-    return this.adapter.prepare(
+    const diagnostics = await this.adapter.prepare(
       {
         parakeetModelPath: this.modelDirectory,
         requireModelProfile: true,
@@ -312,6 +352,13 @@ class LocalTranscriber {
       },
       { signal },
     );
+    return {
+      engineVersion: diagnostics.engineVersion,
+      modelId: diagnostics.modelId,
+      modelVersion: diagnostics.modelVersion,
+      loadMs: diagnostics.lastLoadMs,
+      reused: diagnostics.reused,
+    };
   }
 
   async transcribe(input, options = {}) {
@@ -333,7 +380,15 @@ class LocalTranscriber {
   }
 
   diagnostics() {
-    return this.adapter.diagnostics();
+    const diagnostics = this.adapter.diagnostics();
+    const ready = diagnostics.ready === true;
+    return {
+      state: ready ? 'ready' : 'idle',
+      modelId: ready ? diagnostics.modelId || null : null,
+      modelVersion: ready ? diagnostics.modelVersion || null : null,
+      lastLoadMs: diagnostics.lastLoadMs,
+      lastInferenceMs: diagnostics.lastInferenceMs,
+    };
   }
 
   async dispose() {
@@ -362,4 +417,5 @@ module.exports = {
   OnDeviceTranscriber,
   TranscriptionError,
   parakeetSupportsLanguage,
+  resolveTranscriberExecutable,
 };

@@ -1,0 +1,149 @@
+name: Publish transcription SDK
+
+on:
+  push:
+    tags: ['sdk-v*']
+
+concurrency:
+  group: sdk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SDK_RELEASE_TAG: ${{ github.ref_name }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libxdo-dev \
+            librsvg2-dev
+      - run: npm ci
+      - run: npm run sdk:release:check -- "$SDK_RELEASE_TAG"
+      - run: npm run check
+      - run: cargo test --locked --manifest-path native/transcriber/Cargo.toml
+      - run: cargo test --locked --manifest-path packages/transcribe-tauri/Cargo.toml
+      - run: npm pack --dry-run
+        working-directory: packages/transcribe-node
+      - run: npm pack --dry-run
+        working-directory: packages/transcribe-tauri
+      - run: cargo package --locked --manifest-path native/transcriber/Cargo.toml
+
+  publish-crates:
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Require crates.io publishing token
+        run: test -n "$CARGO_REGISTRY_TOKEN"
+      - name: Publish On-device Engine
+        run: cargo publish --locked --manifest-path native/transcriber/Cargo.toml
+      - name: Wait for the engine to enter the crates.io index
+        run: |
+          version="${SDK_RELEASE_TAG#sdk-v}"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error \
+              "https://crates.io/api/v1/crates/crunchymurmur-transcriber/$version" \
+              >/dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "The engine did not enter the crates.io index in time." >&2
+          exit 1
+      - name: Publish Tauri plugin
+        run: cargo publish --locked --manifest-path packages/transcribe-tauri/Cargo.toml
+      - name: Collect crate archives
+        run: |
+          mkdir sdk-crates
+          cp native/transcriber/target/package/*.crate sdk-crates/
+          cp packages/transcribe-tauri/target/package/*.crate sdk-crates/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sdk-crates
+          path: sdk-crates/
+          if-no-files-found: error
+
+  publish-npm:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Pack npm adapters
+        run: |
+          mkdir sdk-npm
+          npm pack ./packages/transcribe-node --pack-destination sdk-npm
+          npm pack ./packages/transcribe-tauri --pack-destination sdk-npm
+      - name: Publish Node and Tauri adapters
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish sdk-npm/crunchymurmur-transcribe-node-*.tgz \
+            --access public --tag alpha --provenance
+          npm publish sdk-npm/crunchymurmur-transcribe-tauri-*.tgz \
+            --access public --tag alpha --provenance
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sdk-npm
+          path: sdk-npm/
+          if-no-files-found: error
+
+  github-release:
+    needs: [publish-crates, publish-npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: sdk-*
+          path: sdk-assets
+          merge-multiple: true
+      - name: Add the independently installable chat demo
+        run: |
+          git archive \
+            --format=zip \
+            --output=sdk-assets/crunchymurmur-sdk-chat-demo.zip \
+            HEAD examples/electron-chat
+          cd sdk-assets
+          sha256sum * > SHA256SUMS
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: sdk-assets/*
+      - name: Publish SDK GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$SDK_RELEASE_TAG" sdk-assets/* \
+            --verify-tag \
+            --prerelease \
+            --generate-notes \
+            --title "CrunchyMurmur Transcription SDK ${SDK_RELEASE_TAG#sdk-v}"

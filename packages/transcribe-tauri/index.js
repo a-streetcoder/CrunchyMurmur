@@ -22,7 +22,13 @@ export class TranscriptionError extends Error {
   }
 }
 
-export function createTranscriber(invokeCommand = defaultInvoke) {
+export function createTranscriber(configuration = {}) {
+  const legacyInvoke = typeof configuration === 'function' ? configuration : null;
+  const invokeCommand = legacyInvoke || configuration.invoke || defaultInvoke;
+  const configuredPreparation = legacyInvoke ? null : {
+    modelDirectory: configuration.modelDirectory,
+    trustedManifestSha256: configuration.trustedManifestSha256,
+  };
   const call = async (command, payload) => {
     try {
       return await invokeCommand(`${COMMAND_PREFIX}|${command}`, payload);
@@ -32,7 +38,7 @@ export function createTranscriber(invokeCommand = defaultInvoke) {
   };
 
   return {
-    prepare(options) {
+    prepare(options = configuredPreparation) {
       return call('prepare', { options });
     },
     transcribe(input, options = {}) {

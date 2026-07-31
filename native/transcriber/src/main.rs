@@ -1,7 +1,9 @@
-use crunchymurmur_transcriber::{EngineError, EngineInfo, OnDeviceEngine, TranscriptOutcome};
+use crunchymurmur_transcriber::{
+    EngineError, EngineInfo, OnDeviceEngine, TranscriptOutcome, engine_version,
+};
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +36,14 @@ struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
     model_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    engine_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reused: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     load_ms: Option<u128>,
     #[serde(skip_serializing_if = "Option::is_none")]
     inference_ms: Option<u128>,
@@ -49,6 +59,10 @@ impl Response {
             error_code: None,
             recoverable: None,
             model_path: None,
+            engine_version: Some(engine_version().to_string()),
+            model_id: None,
+            model_version: None,
+            reused: None,
             load_ms: None,
             inference_ms: None,
         }
@@ -88,11 +102,7 @@ impl Runtime {
         }
     }
 
-    fn prepare_for(
-        &mut self,
-        path: &PathBuf,
-        request: &Request,
-    ) -> Result<EngineInfo, EngineError> {
+    fn prepare_for(&mut self, path: &Path, request: &Request) -> Result<EngineInfo, EngineError> {
         if !request.trusted_manifest_sha256.is_empty() {
             self.engine
                 .prepare_trusted_profile(path, &request.trusted_manifest_sha256)
@@ -122,6 +132,9 @@ impl Runtime {
                         self.model_path = Some(path.clone());
                         let mut response = Response::success();
                         response.model_path = Some(path.to_string_lossy().into_owned());
+                        response.model_id = info.model_id;
+                        response.model_version = info.model_version;
+                        response.reused = Some(info.reused);
                         response.load_ms = Some(info.load_ms);
                         response
                     }
