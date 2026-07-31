@@ -1,6 +1,6 @@
 # CrunchyMurmur On-device Transcription SDK
 
-> Status: approved design, implementation not yet published.
+> Status: in-repository desktop preview, not yet published.
 >
 > Package names and examples in this guide are provisional. Do not add them to an application until the corresponding release artifacts exist.
 
@@ -234,22 +234,31 @@ The Node adapter will support Electron main processes and ordinary Node applicat
 
 ## Example: Tauri
 
-Tauri applications will link the Rust crate through a plugin. The exact crate names are provisional.
+Tauri 2 desktop applications link the in-repository Rust plugin directly:
 
 ```rust
-let engine = Transcriber::open(ModelOptions {
-    directory: model_directory,
-    language: Language::Auto,
-}).await?;
-
-let result = engine.transcribe(AudioInput::WavFile(audio_path)).await?;
-
-if result.outcome == TranscriptOutcome::Speech {
-    app.emit("voice-transcript", result.text)?;
-}
+tauri::Builder::default()
+    .plugin(tauri_plugin_crunchymurmur_transcribe::init())
+    .run(tauri::generate_context!())?;
 ```
 
-Tauri desktop may package a sidecar for isolation, but direct Rust linkage is the preferred default. Tauri mobile will require the same iOS and Android lifecycle work as other native applications.
+The JavaScript guest bindings use the same default-first shape:
+
+```ts
+import { createTranscriber } from '@crunchymurmur/transcribe-tauri';
+
+const transcriber = createTranscriber();
+await transcriber.prepare({
+  modelDirectory: applicationModelDirectory,
+  trustedManifestSha256: verifiedRelease.models.parakeetV3.manifestSha256,
+});
+const result = await transcriber.transcribe({ path: recordedWavPath });
+```
+
+The default Tauri permission set exposes diagnostics only. Hosts explicitly
+grant preparation, filesystem transcription, and disposal to trusted windows.
+Tauri desktop uses direct Rust linkage; Tauri mobile still requires the same
+iOS and Android lifecycle work as the other native adapters.
 
 ## Audio contract
 
@@ -470,18 +479,19 @@ Planned publication channels are npm for Node and React Native, crates.io for Ru
 
 ### Phase 1: extract and prove the engine
 
-- Convert the current Rust helper into a reusable library crate.
-- Keep the existing JSON-lines binary as a thin adapter.
-- Define stable audio, result, error and lifecycle types.
-- Add model-manifest validation and shared conformance fixtures.
-- Migrate CrunchyMurmur's Parakeet path onto the extracted crate.
+- [x] Convert the current Rust helper into a reusable library crate.
+- [x] Keep the existing JSON-lines binary as a thin adapter.
+- [x] Define stable file-audio, result, error and lifecycle types.
+- [x] Add model-manifest validation and initial conformance fixtures.
+- [x] Migrate CrunchyMurmur's Parakeet path onto the extracted crate.
 
 ### Phase 2: desktop packages
 
-- Publish the Node/Electron adapter with platform runtime artifacts.
-- Build a Tauri 2 plugin that links the Rust crate directly.
-- Add example chat composer integrations.
-- Publish benchmarks for Windows, macOS and Linux.
+- [ ] Publish the Node/Electron adapter with platform runtime artifacts.
+- [x] Build an in-repository Tauri 2 plugin that links the Rust crate directly.
+- [ ] Publish the Tauri crate and guest bindings.
+- [ ] Add example chat composer integrations.
+- [ ] Publish benchmarks for Windows, macOS and Linux.
 
 ### Phase 3: native mobile feasibility
 
@@ -510,7 +520,10 @@ Before implementing an adapter:
 7. Document artifact architectures, minimum operating-system versions and native dependencies.
 8. Publish package, runtime and model sizes separately.
 
-The first implementation work should create the Rust library, Node/Electron adapter and Tauri plugin together. Two real host adapters will validate the seam before Swift, Kotlin and React Native depend on it.
+The Rust library, Node/Electron adapter, and Tauri plugin now share one engine
+implementation in this repository. Publication, streaming/cancellation
+conformance, and real host examples remain required before Swift, Kotlin, and
+React Native depend on the seam.
 
 ## Related documentation
 

@@ -20,6 +20,7 @@ build/whisper-cache/
 build/whisper-runtime/
 build/transcriber-runtime/
 native/transcriber/target/
+packages/transcribe-tauri/target/
 ui/editor-assets/
 ui/editor.bundle.js
 ui/editor.bundle.css

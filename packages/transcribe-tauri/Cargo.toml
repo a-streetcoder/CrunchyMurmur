@@ -1,0 +1,21 @@
+[package]
+name = "tauri-plugin-crunchymurmur-transcribe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+description = "Tauri 2 desktop adapter for the CrunchyMurmur on-device transcription engine"
+repository = "https://github.com/a-streetcoder/CrunchyMurmur"
+links = "tauri-plugin-crunchymurmur-transcribe"
+publish = false
+
+[lib]
+crate-type = ["lib"]
+
+[build-dependencies]
+tauri-plugin = { version = "2.6.3", features = ["build"] }
+
+[dependencies]
+crunchymurmur-transcriber = { path = "../../native/transcriber" }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2.11.5", default-features = false }
