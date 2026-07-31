@@ -1,8 +1,8 @@
 # CrunchyMurmur On-device Transcription SDK
 
-> Status: in-repository desktop preview, not yet published.
+> Status: `0.1.0-alpha.1` desktop release candidate.
 >
-> Package names and examples in this guide are provisional. Do not add them to an application until the corresponding release artifacts exist.
+> The implementation, packages, conformance tests, demo, and automated publication workflow are ready. The first registry release still requires the project administrator to configure npm and crates.io publishing credentials.
 
 The CrunchyMurmur On-device Transcription SDK will make the local transcription implementation used by the desktop application available to other desktop and native applications. It is designed for chat composers, push-to-talk controls, local note capture and other privacy-sensitive voice input.
 
@@ -102,66 +102,47 @@ Host Recorders must:
 
 The SDK may provide optional recorder helpers, but recording is not part of the Rust engine.
 
-## Provisional interface
+## Alpha desktop interface
 
-The public host interface is default-first. The Rust engine underneath it remains smaller and accepts PCM audio through an equivalent native contract.
+The alpha contract deliberately starts with complete local WAV files. Hosts own
+microphone capture and write a temporary WAV before calling the adapter. PCM
+streaming and Voice Sessions remain planned extensions and are not part of the
+`0.1.0-alpha.1` compatibility promise.
 
 ```ts
-type PcmAudio = {
-  samples: Float32Array | Int16Array;
-  sampleRate: number;
-  channels: 1 | 2;
-};
-
-type AudioInput =
-  | PcmAudio
-  | { wav: Uint8Array }
-  | { path: string };
+type AudioInput = { path: string };
 
 type EngineInfo = {
   engineVersion: string;
   modelId: string;
   modelVersion: string;
-  executionProvider: string;
+  loadMs: number;
+  reused: boolean;
 };
 
 type TranscribeOptions = {
   language?: string | 'auto';
   signal?: AbortSignal;
-  timeoutMs?: number;
 };
-
-type SessionOptions = TranscribeOptions;
 
 type Transcript = {
   text: string;
   outcome: 'speech' | 'no-speech';
   language?: string;
-  audioDurationMs: number;
   inferenceMs: number;
 };
 
 type Diagnostics = {
-  state: 'idle' | 'preparing' | 'ready' | 'transcribing' | 'disposed';
-  modelId?: string;
-  modelVersion?: string;
-  executionProvider?: string;
-  queued: number;
-  lastLoadMs?: number;
-  lastInferenceMs?: number;
-  lastErrorCode?: string;
-};
-
-type TranscriptionSession = {
-  push(audio: PcmAudio): Promise<void>;
-  finish(): Promise<Transcript>;
-  cancel(): void;
+  state: 'idle' | 'ready';
+  modelId: string | null;
+  modelVersion: string | null;
+  lastLoadMs: number | null;
+  lastInferenceMs: number | null;
 };
 
 type LocalTranscriber = {
   prepare(): Promise<EngineInfo>;
   transcribe(input: AudioInput, options?: TranscribeOptions): Promise<Transcript>;
-  session(options?: SessionOptions): TranscriptionSession;
   diagnostics(): Diagnostics;
   dispose(): Promise<void>;
 };
@@ -171,9 +152,9 @@ type LocalTranscriber = {
 the stable `CANCELLED` error, and every failure rejects with its corresponding
 stable error code; neither is a `Transcript.outcome`.
 
-The exact language-specific names may change before the first alpha. The behavioural contract below is the stable design target.
-
-Native adapters express cancellation using their platform convention: Swift task cancellation, Kotlin coroutine cancellation, Rust cancellation tokens and React Native promise or event cancellation. Each maps to the same engine behaviour as `AbortSignal`.
+The four methods and their observable results are the shared desktop adapter
+seam. Native adapters added later will express cancellation using their
+platform convention while preserving the same engine behaviour.
 
 ### Default lifecycle
 
@@ -185,26 +166,16 @@ Native adapters express cancellation using their platform convention: Swift task
 
 Applications that need the lowest first-message latency should call `prepare()` while their composer is idle. Applications that prefer lower idle memory may wait for the first transcription.
 
-### Voice Session lifecycle
-
-1. Create a session.
-2. Push one or more ordered PCM chunks.
-3. Call `finish()` exactly once, or call `cancel()`.
-4. Do not push audio after completion or cancellation.
-
-Cancellation is idempotent. A completed or cancelled session cannot be reused.
-
-The first release produces a final transcript after `finish()`. Accepting incremental audio does not imply partial transcript output.
-
 ### Concurrency
 
-One engine instance owns one loaded model and performs one inference at a time. Host adapters serialise additional transcription requests in first-in, first-out order. Queued work remains independently cancellable.
+One engine instance owns one loaded model and performs one inference at a time.
+The desktop alpha returns `ENGINE_BUSY` for an overlapping request; hosts that
+allow multiple submissions must serialise them before calling the adapter.
+Queueing with independently cancellable work remains a planned extension.
 
 Applications that genuinely require parallel inference must create separate engine instances and accept the additional memory cost.
 
 ## Example: Electron or Node
-
-The following illustrates the planned developer experience. The package is not published yet.
 
 ```ts
 import { createLocalTranscriber } from '@crunchymurmur/transcribe-node';
@@ -230,7 +201,14 @@ if (result.outcome === 'speech') {
 await transcriber.dispose();
 ```
 
-The Node adapter will support Electron main processes and ordinary Node applications. Renderer processes should call a trusted main-process interface rather than receive filesystem or native-process access.
+The adapter discovers the native runtime from
+`CRUNCHYMURMUR_TRANSCRIBER_PATH`, `PATH`, or Cargo's binary directory. A host
+may provide its own `resolveExecutable` function when it ships a verified
+runtime elsewhere. Electron renderer processes should call a trusted
+main-process interface rather than receive filesystem or native-process
+access. The complete [chat demo](../examples/electron-chat/) shows this
+boundary, microphone capture, temporary-file cleanup, and system light/dark
+mode.
 
 ## Example: Tauri
 
@@ -250,11 +228,11 @@ The JavaScript guest bindings use the same default-first shape:
 ```ts
 import { createTranscriber } from '@crunchymurmur/transcribe-tauri';
 
-const transcriber = createTranscriber();
-await transcriber.prepare({
+const transcriber = createTranscriber({
   modelDirectory: applicationModelDirectory,
   trustedManifestSha256: verifiedRelease.models.parakeetV3.manifestSha256,
 });
+await transcriber.prepare();
 const result = await transcriber.transcribe({ path: recordedWavPath });
 ```
 
@@ -478,7 +456,21 @@ The engine, adapters and Model Profiles are versioned independently.
 - Package installation does not silently download a model.
 - Unsupported operating-system versions and architectures fail during installation or preparation with a stable error.
 
-Planned publication channels are npm for Node and React Native, crates.io for Rust and Tauri, Swift Package Manager for Apple platforms and Maven Central for Kotlin artifacts. Publication details remain provisional until namespace ownership, signing and automated release workflows are verified.
+Desktop alpha publication uses npm for the Node and Tauri guest packages,
+crates.io for the Rust engine and Tauri plugin, and a matching GitHub
+prerelease. Push an immutable `sdk-v<version>` tag only after all package
+manifests contain that exact version. The workflow validates and packages
+everything first, publishes the core crate before its dependent Tauri plugin,
+uses npm provenance, and attaches package archives, SHA-256 checksums, the chat
+demo, and GitHub build-provenance attestations.
+
+The first publication requires `CARGO_REGISTRY_TOKEN` and `NPM_TOKEN` because
+both registries require an owner to create the package before it can trust this
+workflow. After that bootstrap release, configure this workflow as a trusted
+publisher for each npm package and crate, then migrate the publish jobs to OIDC
+short-lived credentials. Publishing is permanent, so local
+`npm pack --dry-run` and `cargo package` checks are release gates. Swift Package
+Manager and Maven Central remain planned channels for later native adapters.
 
 ## Delivery phases
 
@@ -495,7 +487,7 @@ Planned publication channels are npm for Node and React Native, crates.io for Ru
 - [ ] Publish the Node/Electron adapter with platform runtime artifacts.
 - [x] Build an in-repository Tauri 2 plugin that links the Rust crate directly.
 - [ ] Publish the Tauri crate and guest bindings.
-- [ ] Add example chat composer integrations.
+- [x] Add an Electron chat composer integration.
 - [ ] Publish benchmarks for Windows, macOS and Linux.
 
 ### Phase 3: native mobile feasibility
@@ -525,10 +517,11 @@ Before implementing an adapter:
 7. Document artifact architectures, minimum operating-system versions and native dependencies.
 8. Publish package, runtime and model sizes separately.
 
-The Rust library, Node/Electron adapter, and Tauri plugin now share one engine
-implementation in this repository. Publication, streaming/cancellation
-conformance, and real host examples remain required before Swift, Kotlin, and
-React Native depend on the seam.
+The Rust library, Node/Electron adapter, Tauri plugin, and Electron chat demo
+now share one engine implementation and a tested four-method desktop seam.
+Registry publication, runtime archives, benchmarks, and PCM/session
+conformance remain required before Swift, Kotlin, and React Native depend on
+the seam.
 
 ## Related documentation
 

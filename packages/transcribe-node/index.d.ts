@@ -32,7 +32,7 @@ export interface TranscriptionDiagnostics {
 }
 
 export interface OnDeviceTranscriberOptions {
-  resolveExecutable: () => string;
+  resolveExecutable?: () => string;
   spawnProcess?: (...args: any[]) => any;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
   loadTimeoutMs?: number;
@@ -47,11 +47,28 @@ export interface Transcript {
   text: string;
   outcome: 'speech' | 'no-speech';
   language?: string;
+  inferenceMs: number;
+}
+
+export interface EngineInformation {
+  engineVersion: string;
+  modelId: string;
+  modelVersion: string;
+  loadMs: number;
+  reused: boolean;
+}
+
+export interface Diagnostics {
+  state: 'idle' | 'ready';
+  modelId: string | null;
+  modelVersion: string | null;
+  lastLoadMs: number | null;
+  lastInferenceMs: number | null;
 }
 
 export interface LocalTranscriberOptions extends Omit<OnDeviceTranscriberOptions, 'resolveExecutable'> {
   modelDirectory: string;
-  resolveExecutable: () => string;
+  resolveExecutable?: () => string;
   trustedManifestSha256?: string;
   allowUntrustedProfile?: boolean;
 }
@@ -83,12 +100,12 @@ export class OnDeviceTranscriber {
 
 export class LocalTranscriber {
   constructor(options: LocalTranscriberOptions);
-  prepare(options?: { signal?: AbortSignal }): Promise<TranscriptionDiagnostics>;
+  prepare(options?: { signal?: AbortSignal }): Promise<EngineInformation>;
   transcribe(
     input: AudioInput | string,
     options?: { language?: string; signal?: AbortSignal },
   ): Promise<Transcript>;
-  diagnostics(): TranscriptionDiagnostics;
+  diagnostics(): Diagnostics;
   dispose(): Promise<void>;
 }
 
@@ -96,3 +113,9 @@ export function createLocalTranscriber(options: LocalTranscriberOptions): LocalT
 export { OnDeviceTranscriber as NativeTranscriptionService };
 export { TranscriptionError as NativeTranscriptionError };
 export function parakeetSupportsLanguage(language?: string): boolean;
+export function resolveTranscriberExecutable(options?: {
+  env?: Record<string, string | undefined>;
+  platform?: NodeJS.Platform;
+  pathSeparator?: string;
+  homeDirectory?: string;
+}): string;

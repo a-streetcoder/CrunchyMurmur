@@ -1,9 +1,8 @@
 {
   "name": "@crunchymurmur/transcribe-tauri",
-  "version": "0.0.0-development",
-  "description": "Provisional Tauri 2 guest bindings for CrunchyMurmur on-device transcription.",
+  "version": "0.1.0-alpha.1",
+  "description": "Private, on-device transcription guest bindings for Tauri 2 applications.",
   "type": "module",
-  "private": true,
   "main": "index.js",
   "types": "index.d.ts",
   "exports": {
@@ -25,5 +24,19 @@
     "type": "git",
     "url": "git+https://github.com/a-streetcoder/CrunchyMurmur.git",
     "directory": "packages/transcribe-tauri"
+  },
+  "homepage": "https://github.com/a-streetcoder/CrunchyMurmur/tree/main/packages/transcribe-tauri",
+  "bugs": {
+    "url": "https://github.com/a-streetcoder/CrunchyMurmur/issues"
+  },
+  "keywords": [
+    "transcription",
+    "speech-to-text",
+    "on-device",
+    "tauri",
+    "parakeet"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

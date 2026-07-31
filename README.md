@@ -141,6 +141,21 @@ npm start
 
 Native release packages must be built on their target platform. See [Contributing](.github/CONTRIBUTING.md) and [Releasing](docs/releasing.md).
 
+## On-device transcription SDK
+
+The local Parakeet engine is also available as a desktop SDK release candidate
+for Node/Electron and Tauri. It exposes a small shared lifecycle:
+`prepare`, `transcribe`, `diagnostics`, and `dispose`. Microphone permission and
+capture stay with the host application, while model validation, warm reuse,
+inference, stable errors, and privacy-safe diagnostics stay in the shared Rust
+engine.
+
+The [Electron chat demo](examples/electron-chat/) is a complete integration
+example with push-to-talk recording and a secure renderer-to-main boundary.
+Read the [SDK guide](docs/on-device-sdk.md) for installation, platform scope,
+trust requirements, publication status, and the Swift/Kotlin/React Native
+roadmap.
+
 ## Documentation
 
 - [Documentation index](docs/README.md)

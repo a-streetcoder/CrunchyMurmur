@@ -1,0 +1,17 @@
+{
+  "name": "crunchymurmur-sdk-chat-demo",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "description": "Minimal Electron chat composer using the CrunchyMurmur on-device transcription SDK.",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@crunchymurmur/transcribe-node": "file:../../packages/transcribe-node"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0"
+  }
+}

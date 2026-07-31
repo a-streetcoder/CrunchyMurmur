@@ -1,10 +1,14 @@
 [package]
 name = "crunchymurmur-transcriber"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 license = "MIT"
-description = "Bundled local transcription helper for CrunchyMurmur"
-publish = false
+description = "Local-first, on-device transcription engine used by CrunchyMurmur desktop adapters"
+repository = "https://github.com/a-streetcoder/CrunchyMurmur"
+homepage = "https://github.com/a-streetcoder/CrunchyMurmur/tree/main/native/transcriber"
+readme = "README.md"
+keywords = ["transcription", "speech-to-text", "on-device", "parakeet"]
+categories = ["multimedia::audio"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

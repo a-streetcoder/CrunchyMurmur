@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const ignoredDirectories = new Set(['.git', '.claude', 'dist', 'node_modules']);
+const ignoredDirectories = new Set(['.git', '.claude', 'dist', 'node_modules', 'target']);
 const failures = [];
 
 function markdownFiles(directory) {

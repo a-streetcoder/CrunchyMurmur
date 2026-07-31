@@ -12,7 +12,10 @@ use transcribe_rs::onnx::Quantization;
 use transcribe_rs::onnx::parakeet::ParakeetModel;
 use transcribe_rs::{SpeechModel, TranscribeOptions};
 
-const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
+// Model Profiles version the engine contract independently from the crate
+// publication. The app's verified profiles already require contract 0.1.0,
+// while the reusable crate is initially distributed as 0.1.0-alpha.1.
+const ENGINE_VERSION: &str = "0.1.0";
 
 /// Returns the semantic version of the shared native engine.
 pub fn engine_version() -> &'static str {
@@ -81,8 +84,14 @@ impl fmt::Display for EngineError {
 impl Error for EngineError {}
 
 /// Model preparation timing and cache reuse information.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineInfo {
+    /// Semantic version of the loaded on-device engine.
+    pub engine_version: &'static str,
+    /// Stable model identifier when preparation used a Model Profile.
+    pub model_id: Option<String>,
+    /// Semantic model version when preparation used a Model Profile.
+    pub model_version: Option<String>,
     /// Time spent loading the model, in milliseconds.
     pub load_ms: u128,
     /// Whether an already prepared model instance was reused.
@@ -317,6 +326,8 @@ pub struct OnDeviceEngine {
     parakeet: Option<ParakeetModel>,
     model_path: Option<PathBuf>,
     trusted_manifest_sha256: Option<String>,
+    model_id: Option<String>,
+    model_version: Option<String>,
     last_load_ms: Option<u128>,
 }
 
@@ -333,6 +344,8 @@ impl OnDeviceEngine {
             parakeet: None,
             model_path: None,
             trusted_manifest_sha256: None,
+            model_id: None,
+            model_version: None,
             last_load_ms: None,
         }
     }
@@ -341,6 +354,9 @@ impl OnDeviceEngine {
     pub fn prepare(&mut self, model_path: &Path) -> Result<EngineInfo, EngineError> {
         if self.model_path.as_deref() == Some(model_path) && self.parakeet.is_some() {
             return Ok(EngineInfo {
+                engine_version: ENGINE_VERSION,
+                model_id: self.model_id.clone(),
+                model_version: self.model_version.clone(),
                 load_ms: 0,
                 reused: true,
             });
@@ -354,21 +370,24 @@ impl OnDeviceEngine {
         }
 
         let started = Instant::now();
-        let model = ParakeetModel::load(&model_path.to_path_buf(), &Quantization::Int8).map_err(
-            |error| {
-                EngineError::new(
-                    EngineErrorCode::ModelInvalid,
-                    format!("Parakeet model could not be loaded: {error}"),
-                    true,
-                )
-            },
-        )?;
+        let model = ParakeetModel::load(model_path, &Quantization::Int8).map_err(|error| {
+            EngineError::new(
+                EngineErrorCode::ModelInvalid,
+                format!("Parakeet model could not be loaded: {error}"),
+                true,
+            )
+        })?;
         let load_ms = started.elapsed().as_millis();
         self.parakeet = Some(model);
         self.model_path = Some(model_path.to_path_buf());
         self.trusted_manifest_sha256 = None;
+        self.model_id = None;
+        self.model_version = None;
         self.last_load_ms = Some(load_ms);
         Ok(EngineInfo {
+            engine_version: ENGINE_VERSION,
+            model_id: None,
+            model_version: None,
             load_ms,
             reused: false,
         })
@@ -376,14 +395,8 @@ impl OnDeviceEngine {
 
     /// Validates a Model Profile and prepares its model files.
     pub fn prepare_profile(&mut self, model_directory: &Path) -> Result<EngineInfo, EngineError> {
-        if self.model_path.as_deref() == Some(model_directory) && self.parakeet.is_some() {
-            return Ok(EngineInfo {
-                load_ms: 0,
-                reused: true,
-            });
-        }
-        ModelProfile::load(model_directory)?;
-        self.prepare(model_directory)
+        let profile = ModelProfile::load(model_directory)?;
+        self.prepare_validated_profile(&profile)
     }
 
     /// Prepares a model from a profile that has already been validated.
@@ -395,7 +408,12 @@ impl OnDeviceEngine {
         &mut self,
         profile: &ModelProfile,
     ) -> Result<EngineInfo, EngineError> {
-        self.prepare(profile.directory())
+        let mut information = self.prepare(profile.directory())?;
+        self.model_id = Some(profile.model_id().to_string());
+        self.model_version = Some(profile.model_version().to_string());
+        information.model_id = self.model_id.clone();
+        information.model_version = self.model_version.clone();
+        Ok(information)
     }
 
     /// Validates an authenticated Model Profile and prepares its model files.
@@ -411,6 +429,9 @@ impl OnDeviceEngine {
             && self.trusted_manifest_sha256.as_deref() == Some(trusted_digest.as_str())
         {
             return Ok(EngineInfo {
+                engine_version: ENGINE_VERSION,
+                model_id: self.model_id.clone(),
+                model_version: self.model_version.clone(),
                 load_ms: 0,
                 reused: true,
             });

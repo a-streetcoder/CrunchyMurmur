@@ -15,7 +15,7 @@ This documentation covers installation, day-to-day use, platform differences, de
 ## Build and maintain CrunchyMurmur
 
 - [Architecture](architecture.md) — process boundaries, storage, native integrations, and security model.
-- [On-device Transcription SDK](on-device-sdk.md) — in-repository desktop preview and roadmap for native adapters.
+- [On-device Transcription SDK](on-device-sdk.md) — desktop alpha packages, Electron chat demo, and roadmap for native adapters.
 - [Contributing](../.github/CONTRIBUTING.md) — local setup, checks, pull requests, and platform expectations.
 - [Releasing](releasing.md) — signed cross-platform releases, manifests, checksums, and attestations.
 - [Security policy](../.github/SECURITY.md) — supported versions and private vulnerability reporting.

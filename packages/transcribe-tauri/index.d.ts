@@ -5,6 +5,12 @@ export type TranscriptionErrorCode =
   | 'MODEL_NOT_PREPARED'
   | 'AUDIO_INVALID'
   | 'LANGUAGE_UNSUPPORTED'
+  | 'RUNTIME_MISSING'
+  | 'ENGINE_BUSY'
+  | 'ENGINE_CRASHED'
+  | 'CANCELLED'
+  | 'TIMED_OUT'
+  | 'DISPOSED'
   | 'INFERENCE_FAILED'
   | 'INTERNAL';
 
@@ -37,10 +43,10 @@ export interface Transcript {
 
 export interface Diagnostics {
   state: 'idle' | 'ready';
-  modelId?: string;
-  modelVersion?: string;
-  lastLoadMs?: number;
-  lastInferenceMs?: number;
+  modelId: string | null;
+  modelVersion: string | null;
+  lastLoadMs: number | null;
+  lastInferenceMs: number | null;
 }
 
 export type InvokeCommand = (
@@ -48,19 +54,23 @@ export type InvokeCommand = (
   payload?: Record<string, unknown>,
 ) => Promise<unknown>;
 
+export interface LocalTranscriberOptions extends PrepareOptions {
+  invoke?: InvokeCommand;
+}
+
 export class TranscriptionError extends Error {
   code: TranscriptionErrorCode | (string & {});
   recoverable: boolean;
 }
 
 export interface LocalTranscriber {
-  prepare(options: PrepareOptions): Promise<EngineInformation>;
+  prepare(options?: PrepareOptions): Promise<EngineInformation>;
   transcribe(input: AudioInput, options?: TranscribeOptions): Promise<Transcript>;
   diagnostics(): Promise<Diagnostics>;
   dispose(): Promise<void>;
 }
 
-export function createTranscriber(invokeCommand?: InvokeCommand): LocalTranscriber;
+export function createTranscriber(options: LocalTranscriberOptions): LocalTranscriber;
 export function prepare(options: PrepareOptions): Promise<EngineInformation>;
 export function transcribe(
   input: AudioInput,
