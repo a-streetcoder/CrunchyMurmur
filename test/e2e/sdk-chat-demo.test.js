@@ -21,7 +21,10 @@ test('SDK chat demo opens with its secure transcription controls', { timeout: 30
 
   assert.equal(await page.title(), 'CrunchyMurmur SDK Chat');
   assert.equal(await page.locator('#record').count(), 1);
-  assert.equal(await page.locator('#message').getAttribute('placeholder'), 'Write a message…');
+  assert.equal(
+    await page.locator('#message').getAttribute('placeholder'),
+    await page.evaluate(() => window.demoI18n.t('placeholder')),
+  );
   assert.deepEqual(
     await page.evaluate(() => Object.keys(window.chatDemo).sort()),
     ['diagnostics', 'transcribeWav'],

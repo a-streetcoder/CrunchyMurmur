@@ -57,6 +57,45 @@ test('chat demo sends a temporary WAV through the public SDK and removes it', as
   fs.rmSync(temporary, { recursive: true, force: true });
 });
 
+test('chat demo serialises concurrent engine configuration and inference', async () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'crunchymurmur-sdk-queue-'));
+  let active = 0;
+  let maximumActive = 0;
+  const prepared = [];
+  const controller = createTranscriptionController({
+    temporaryDirectory: temporary,
+    resolveExecutable: () => 'native-runtime',
+    createTranscriber({ modelDirectory }) {
+      return {
+        async prepare() {
+          prepared.push(modelDirectory);
+        },
+        async transcribe() {
+          active += 1;
+          maximumActive = Math.max(maximumActive, active);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          active -= 1;
+          return { text: modelDirectory, outcome: 'speech', inferenceMs: 5 };
+        },
+        async dispose() {},
+      };
+    },
+  });
+
+  const request = (modelDirectory, byte) => controller.transcribeWav({
+    wavBytes: Uint8Array.from([byte]),
+    modelDirectory,
+    trustedManifestSha256: 'a'.repeat(64),
+  });
+  const results = await Promise.all([request('model-a', 1), request('model-b', 2)]);
+
+  assert.equal(maximumActive, 1);
+  assert.deepEqual(prepared, ['model-a', 'model-b']);
+  assert.deepEqual(results.map((result) => result.text), ['model-a', 'model-b']);
+  await controller.dispose();
+  fs.rmSync(temporary, { recursive: true, force: true });
+});
+
 test('chat demo provides every message in each supported interface locale', () => {
   const supported = ['en', 'it', 'es', 'pt', 'fr', 'de', 'da', 'no', 'sv', 'zh', 'ko', 'ja'];
   assert.deepEqual(Object.keys(CATALOGS), supported);

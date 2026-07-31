@@ -7,7 +7,7 @@ process, and passes only that local path to the On-device Engine. The temporary
 file is removed after every successful or failed transcription.
 
 The demo does not call a chat provider. Sending a message adds a local example
-reply so the transcription integration can be evaluated without an account,
+reply, so the transcription integration can be evaluated without an account,
 network service, or API key.
 
 ## Run from this repository

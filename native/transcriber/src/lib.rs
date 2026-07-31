@@ -395,15 +395,6 @@ impl OnDeviceEngine {
 
     /// Validates a Model Profile and prepares its model files.
     pub fn prepare_profile(&mut self, model_directory: &Path) -> Result<EngineInfo, EngineError> {
-        if self.model_path.as_deref() == Some(model_directory) && self.parakeet.is_some() {
-            return Ok(EngineInfo {
-                engine_version: ENGINE_VERSION,
-                model_id: self.model_id.clone(),
-                model_version: self.model_version.clone(),
-                load_ms: 0,
-                reused: true,
-            });
-        }
         let profile = ModelProfile::load(model_directory)?;
         self.prepare_validated_profile(&profile)
     }

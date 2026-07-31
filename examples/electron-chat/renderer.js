@@ -135,6 +135,14 @@ async function startRecording() {
     setStatus('recording', true);
     maximumTimer = window.setTimeout(stopRecording, 60_000);
   } catch {
+    mediaStream?.getTracks().forEach((track) => track.stop());
+    await audioContext?.close().catch(() => {});
+    mediaStream = null;
+    audioContext = null;
+    recorderNode = null;
+    silentGain = null;
+    chunks = [];
+    recording = false;
     setStatus('microphoneDenied');
   }
 }

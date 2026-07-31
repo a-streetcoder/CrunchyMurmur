@@ -165,3 +165,33 @@ test('Node adapter discovers an explicitly configured native runtime', (t) => {
 
   assert.equal(resolveTranscriberExecutable(), executable);
 });
+
+test('Node runtime discovery skips directories and non-executable files', (t) => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'crunchymurmur-runtime-candidates-'));
+  const configuredDirectory = path.join(temporary, 'configured');
+  const blockedDirectory = path.join(temporary, 'blocked');
+  const validDirectory = path.join(temporary, 'valid');
+  fs.mkdirSync(configuredDirectory);
+  fs.mkdirSync(blockedDirectory);
+  fs.mkdirSync(validDirectory);
+  const executableName = process.platform === 'win32'
+    ? 'crunchymurmur-transcriber.exe'
+    : 'crunchymurmur-transcriber';
+  if (process.platform !== 'win32') {
+    fs.writeFileSync(path.join(blockedDirectory, executableName), '');
+  }
+  const validExecutable = path.join(validDirectory, executableName);
+  fs.writeFileSync(validExecutable, '');
+  fs.chmodSync(validExecutable, 0o755);
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+
+  assert.equal(resolveTranscriberExecutable({
+    env: {
+      CRUNCHYMURMUR_TRANSCRIBER_PATH: configuredDirectory,
+      PATH: `${blockedDirectory}${path.delimiter}${validDirectory}`,
+      CARGO_HOME: path.join(temporary, 'cargo'),
+    },
+    platform: process.platform,
+    homeDirectory: temporary,
+  }), validExecutable);
+});

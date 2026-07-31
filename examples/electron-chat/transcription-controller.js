@@ -20,6 +20,7 @@ function createTranscriptionController({
 
   let transcriber = null;
   let activeConfiguration = '';
+  let operationQueue = Promise.resolve();
 
   async function configuredTranscriber(modelDirectory, trustedManifestSha256) {
     const directory = String(modelDirectory || '').trim();
@@ -37,12 +38,19 @@ function createTranscriptionController({
       resolveExecutable,
     });
     activeConfiguration = configuration;
-    await transcriber.prepare();
-    return transcriber;
+    const localTranscriber = transcriber;
+    await localTranscriber.prepare();
+    return localTranscriber;
+  }
+
+  function serialise(operation) {
+    const result = operationQueue.then(operation, operation);
+    operationQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   return {
-    async transcribeWav({
+    transcribeWav({
       wavBytes,
       modelDirectory,
       trustedManifestSha256,
@@ -54,20 +62,22 @@ function createTranscriptionController({
       if (wavBytes.byteLength > MAX_WAV_BYTES) {
         throw new TypeError('Recorded WAV audio exceeds the 25 MB demo limit.');
       }
-      const engine = await configuredTranscriber(modelDirectory, trustedManifestSha256);
-      fileSystem.mkdirSync(temporaryDirectory, { recursive: true });
-      const audioPath = path.join(
-        temporaryDirectory,
-        `crunchymurmur-chat-${crypto.randomUUID()}.wav`,
-      );
-      try {
-        fileSystem.writeFileSync(audioPath, wavBytes, { mode: 0o600 });
-        return await engine.transcribe({ path: audioPath }, { language });
-      } finally {
+      return serialise(async () => {
+        const engine = await configuredTranscriber(modelDirectory, trustedManifestSha256);
+        fileSystem.mkdirSync(temporaryDirectory, { recursive: true });
+        const audioPath = path.join(
+          temporaryDirectory,
+          `crunchymurmur-chat-${crypto.randomUUID()}.wav`,
+        );
         try {
-          fileSystem.rmSync(audioPath, { force: true });
-        } catch {}
-      }
+          fileSystem.writeFileSync(audioPath, wavBytes, { mode: 0o600 });
+          return await engine.transcribe({ path: audioPath }, { language });
+        } finally {
+          try {
+            fileSystem.rmSync(audioPath, { force: true });
+          } catch {}
+        }
+      });
     },
 
     async diagnostics() {
@@ -81,6 +91,7 @@ function createTranscriptionController({
     },
 
     async dispose() {
+      await operationQueue;
       await transcriber?.dispose();
       transcriber = null;
       activeConfiguration = '';

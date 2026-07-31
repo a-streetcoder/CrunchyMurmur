@@ -17,6 +17,8 @@ Tags in the form `sdk-v<version>` validate and publish both npm adapters, the
 Rust engine crate, and the Tauri plugin, then create a prerelease with package
 archives, checksums, provenance attestations, and the
 [`electron-chat`](../examples/electron-chat/) integration example. Registry
-credentials must be configured by a repository administrator before the first
-tag. Cross-platform runtime archives and published benchmarks remain follow-up
-work; see the [SDK guide](../docs/on-device-sdk.md) for the delivery sequence.
+bootstrap tag. Once the packages exist, their registry settings can trust the
+workflow and later releases can migrate from bootstrap tokens to short-lived
+OIDC credentials. Cross-platform runtime archives and published benchmarks
+remain follow-up work; see the [SDK guide](../docs/on-device-sdk.md) for the
+delivery sequence.

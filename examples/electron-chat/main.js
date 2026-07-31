@@ -5,6 +5,8 @@ const { resolveExecutable } = require('./runtime');
 
 let window;
 let controller;
+let cleanupStarted = false;
+let cleanupComplete = false;
 
 function sdk() {
   try {
@@ -65,6 +67,15 @@ app.on('activate', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => {
-  controller?.dispose().catch(() => {});
+app.on('before-quit', (event) => {
+  if (cleanupComplete) return;
+  event.preventDefault();
+  if (cleanupStarted) return;
+  cleanupStarted = true;
+  Promise.resolve(controller?.dispose())
+    .catch(() => {})
+    .finally(() => {
+      cleanupComplete = true;
+      app.quit();
+    });
 });

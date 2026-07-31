@@ -64,7 +64,7 @@ export class TranscriptionError extends Error {
 }
 
 export interface LocalTranscriber {
-  prepare(options: PrepareOptions): Promise<EngineInformation>;
+  prepare(options?: PrepareOptions): Promise<EngineInformation>;
   transcribe(input: AudioInput, options?: TranscribeOptions): Promise<Transcript>;
   diagnostics(): Promise<Diagnostics>;
   dispose(): Promise<void>;

@@ -464,12 +464,13 @@ everything first, publishes the core crate before its dependent Tauri plugin,
 uses npm provenance, and attaches package archives, SHA-256 checksums, the chat
 demo, and GitHub build-provenance attestations.
 
-The first publication requires a crates.io token in
-`CARGO_REGISTRY_TOKEN`. npm trusted publishing should be configured for the
-workflow; `NPM_TOKEN` is accepted for namespace bootstrapping. Publishing is
-permanent, so local `npm pack --dry-run` and `cargo package` checks are release
-gates. Swift Package Manager and Maven Central remain planned channels for
-later native adapters.
+The first publication requires `CARGO_REGISTRY_TOKEN` and `NPM_TOKEN` because
+both registries require an owner to create the package before it can trust this
+workflow. After that bootstrap release, configure this workflow as a trusted
+publisher for each npm package and crate, then migrate the publish jobs to OIDC
+short-lived credentials. Publishing is permanent, so local
+`npm pack --dry-run` and `cargo package` checks are release gates. Swift Package
+Manager and Maven Central remain planned channels for later native adapters.
 
 ## Delivery phases
 

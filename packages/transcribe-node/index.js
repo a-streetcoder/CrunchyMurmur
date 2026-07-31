@@ -15,6 +15,17 @@ function parakeetSupportsLanguage(language) {
   return PARAKEET_LANGUAGES.has(String(language || 'auto').toLowerCase());
 }
 
+function usableExecutable(candidate, platform) {
+  try {
+    const metadata = fs.statSync(candidate);
+    if (!metadata.isFile()) return false;
+    if (platform !== 'win32' && (metadata.mode & 0o111) === 0) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveTranscriberExecutable({
   env = process.env,
   platform = process.platform,
@@ -22,19 +33,19 @@ function resolveTranscriberExecutable({
   homeDirectory = os.homedir(),
 } = {}) {
   const configured = String(env.CRUNCHYMURMUR_TRANSCRIBER_PATH || '').trim();
-  if (configured && fs.existsSync(configured)) return configured;
+  if (configured && usableExecutable(configured, platform)) return configured;
   const executable = platform === 'win32'
     ? 'crunchymurmur-transcriber.exe'
     : 'crunchymurmur-transcriber';
   for (const directory of String(env.PATH || '').split(pathSeparator)) {
     if (!directory) continue;
     const candidate = path.join(directory, executable);
-    if (fs.existsSync(candidate)) return candidate;
+    if (usableExecutable(candidate, platform)) return candidate;
   }
   const cargoHome = String(env.CARGO_HOME || '').trim()
     || path.join(homeDirectory, '.cargo');
   const cargoRuntime = path.join(cargoHome, 'bin', executable);
-  return fs.existsSync(cargoRuntime) ? cargoRuntime : '';
+  return usableExecutable(cargoRuntime, platform) ? cargoRuntime : '';
 }
 
 class TranscriptionError extends Error {
