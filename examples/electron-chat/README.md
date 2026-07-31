@@ -39,9 +39,11 @@ directory, in that order.
 
 ## Run from an SDK GitHub release
 
-The SDK prerelease ZIP includes this example and its exact Node adapter under
-`packages/transcribe-node`. After extracting it, install the native runtime and
-start the example:
+Download `crunchymurmur-sdk-chat-demo.zip` from the matching SDK GitHub
+prerelease. The archive contains both `examples/electron-chat` and its exact
+local adapter dependency at `packages/transcribe-node`. After extracting the
+archive without changing that directory structure, install the native runtime
+and start the example:
 
 ```sh
 cargo install crunchymurmur-transcriber --version 0.1.0-alpha.1 --locked
