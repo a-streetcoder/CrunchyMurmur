@@ -132,7 +132,7 @@ jobs:
           git archive \
             --format=zip \
             --output=sdk-assets/crunchymurmur-sdk-chat-demo.zip \
-            HEAD examples/electron-chat
+            HEAD examples/electron-chat packages/transcribe-node
           cd sdk-assets
           sha256sum * > SHA256SUMS
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2

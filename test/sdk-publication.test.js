@@ -36,3 +36,14 @@ test('Rust engine and Tauri adapter are publishable at the same alpha version', 
     /crunchymurmur-transcriber = \{ version = "=0\.1\.0-alpha\.1", path = "\.\.\/\.\.\/native\/transcriber" \}/,
   );
 });
+
+test('SDK release demo archive includes its local Node adapter dependency', () => {
+  const workflow = fs.readFileSync(
+    path.join(ROOT, '.github', 'workflows', 'sdk-release.yml'),
+    'utf8',
+  );
+  assert.match(
+    workflow,
+    /HEAD examples\/electron-chat packages\/transcribe-node/,
+  );
+});

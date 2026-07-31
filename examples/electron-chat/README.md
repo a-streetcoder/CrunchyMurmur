@@ -37,6 +37,19 @@ The demo resolves the runtime from `CRUNCHYMURMUR_TRANSCRIBER_PATH`, this
 repository's `build/transcriber-runtime` directory, `PATH`, or Cargo's binary
 directory, in that order.
 
+## Run from an SDK GitHub release
+
+The SDK prerelease ZIP includes this example and its exact Node adapter under
+`packages/transcribe-node`. After extracting it, install the native runtime and
+start the example:
+
+```sh
+cargo install crunchymurmur-transcriber --version 0.1.0-alpha.1 --locked
+cd examples/electron-chat
+npm ci
+npm start
+```
+
 Open **Transcription setup** and provide:
 
 1. the directory containing `crunchymurmur-model.json` and its declared model
