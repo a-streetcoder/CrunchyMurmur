@@ -13,14 +13,21 @@ The current native engine dependency requires Rust 1.88 or newer.
 ## Host setup
 
 Add the Rust crate to the Tauri application's `src-tauri/Cargo.toml` and
-register it:
+register it with one or more existing, host-owned recording directories:
 
 ```rust
+let transcription = tauri_plugin_crunchymurmur_transcribe::PluginConfig::new()
+    .allow_audio_root(recordings_directory);
+
 tauri::Builder::default()
-    .plugin(tauri_plugin_crunchymurmur_transcribe::init())
+    .plugin(tauri_plugin_crunchymurmur_transcribe::init(transcription))
     .run(tauri::generate_context!())
     .expect("failed to run Tauri application");
 ```
+
+The configuration is deny-by-default: with no allowed audio roots, filesystem
+transcription is unavailable. Canonical path checks prevent webview code from
+reading files outside the configured directories.
 
 The default permission set exposes privacy-safe diagnostics only. Grant the
 commands needed by a trusted window in its Tauri capability:
@@ -55,8 +62,8 @@ const result = await transcriber.transcribe(
 ```
 
 The host owns microphone permission, device selection, WAV creation, retention,
-and the authenticated source of the Model Profile digest. Expose filesystem
-transcription commands only to trusted windows.
+the allowed recording roots, and the authenticated source of the Model Profile
+digest. Expose filesystem transcription commands only to trusted windows.
 
 ## Current preview boundary
 
@@ -64,5 +71,7 @@ transcription commands only to trusted windows.
 - Input is a local WAV-compatible audio path.
 - Results are final `speech` or `no-speech` outcomes.
 - Model manifests and every declared model file are verified before loading.
+- Diagnostics read a lightweight snapshot without waiting for inference.
+- Disposal waits for active inference before releasing the model.
 - Cancellation, streaming PCM sessions, packaged model delivery, and public
   crates.io/npm releases remain follow-up work.

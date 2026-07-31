@@ -63,4 +63,12 @@ test('Tauri guest adapter rejects malformed audio before invoking Rust', async (
     (error) => error instanceof TranscriptionError
       && error.code === 'AUDIO_INVALID',
   );
+
+  for (const path of [42, {}, ['message.wav']]) {
+    await assert.rejects(
+      transcriber.transcribe({ path }),
+      (error) => error instanceof TranscriptionError
+        && error.code === 'AUDIO_INVALID',
+    );
+  }
 });

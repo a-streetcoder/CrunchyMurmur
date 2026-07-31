@@ -5,8 +5,8 @@ use crunchymurmur_transcriber::{
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, RwLock};
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::{Manager, Runtime, State};
 
@@ -138,7 +138,7 @@ pub struct Transcript {
 }
 
 /// Privacy-safe state exposed for host diagnostics.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostics {
     /// Current lifecycle state: `idle` or `ready`.
@@ -153,9 +153,29 @@ pub struct Diagnostics {
     pub last_inference_ms: Option<u64>,
 }
 
+/// Host-owned filesystem roots from which the plugin may read audio.
+#[derive(Debug, Clone, Default)]
+pub struct PluginConfig {
+    allowed_audio_roots: Vec<PathBuf>,
+}
+
+impl PluginConfig {
+    /// Creates a deny-by-default plugin configuration.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Allows audio files beneath an existing host-owned directory.
+    pub fn allow_audio_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.allowed_audio_roots.push(root.into());
+        self
+    }
+}
+
 /// Direct Rust service used by the Tauri command adapter.
 pub struct TranscriberService {
     engine: OnDeviceEngine,
+    allowed_audio_roots: Vec<PathBuf>,
     model_directory: Option<PathBuf>,
     trusted_manifest_sha256: Option<String>,
     model_id: Option<String>,
@@ -174,8 +194,17 @@ impl Default for TranscriberService {
 impl TranscriberService {
     /// Creates an idle service without loading a model or touching the microphone.
     pub fn new() -> Self {
+        Self::with_audio_roots(std::iter::empty::<PathBuf>())
+    }
+
+    /// Creates an idle service restricted to existing host-owned audio roots.
+    pub fn with_audio_roots(roots: impl IntoIterator<Item = PathBuf>) -> Self {
         Self {
             engine: OnDeviceEngine::new(),
+            allowed_audio_roots: roots
+                .into_iter()
+                .filter_map(|root| root.canonicalize().ok())
+                .collect(),
             model_directory: None,
             trusted_manifest_sha256: None,
             model_id: None,
@@ -249,6 +278,13 @@ impl TranscriberService {
                 true,
             ));
         }
+        if !self.engine.is_prepared() {
+            return Err(TranscriptionError::new(
+                TranscriptionErrorCode::ModelNotPrepared,
+                "The transcription model is not prepared.",
+                true,
+            ));
+        }
         let language = options
             .language
             .as_deref()
@@ -262,7 +298,8 @@ impl TranscriberService {
                 true,
             ));
         }
-        let transcript = self.engine.transcribe_file(&PathBuf::from(path))?;
+        let audio_path = resolve_allowed_audio_path(path, &self.allowed_audio_roots)?;
+        let transcript = self.engine.transcribe_file(&audio_path)?;
         let inference_ms = milliseconds(transcript.inference_ms);
         self.last_inference_ms = Some(inference_ms);
         Ok(Transcript {
@@ -300,19 +337,79 @@ fn milliseconds(value: u128) -> u64 {
     value.min(u64::MAX as u128) as u64
 }
 
-#[derive(Clone, Default)]
-struct ManagedState(Arc<Mutex<TranscriberService>>);
-
-fn lock_service(
-    state: &ManagedState,
-) -> Result<std::sync::MutexGuard<'_, TranscriberService>, TranscriptionError> {
-    state.0.lock().map_err(|_| {
+fn resolve_allowed_audio_path(
+    path: impl AsRef<Path>,
+    allowed_roots: &[PathBuf],
+) -> Result<PathBuf, TranscriptionError> {
+    let canonical = path.as_ref().canonicalize().map_err(|_| {
         TranscriptionError::new(
-            TranscriptionErrorCode::Internal,
-            "The transcription service state is unavailable.",
+            TranscriptionErrorCode::AudioInvalid,
+            "Audio file was not found.",
             true,
         )
-    })
+    })?;
+    let is_regular_file = canonical
+        .metadata()
+        .is_ok_and(|metadata| metadata.is_file());
+    if !is_regular_file || !allowed_roots.iter().any(|root| canonical.starts_with(root)) {
+        return Err(TranscriptionError::new(
+            TranscriptionErrorCode::AudioInvalid,
+            "Audio file is outside the host's allowed roots.",
+            true,
+        ));
+    }
+    Ok(canonical)
+}
+
+#[derive(Clone)]
+struct ManagedState {
+    service: Arc<Mutex<TranscriberService>>,
+    diagnostics: Arc<RwLock<Diagnostics>>,
+}
+
+impl ManagedState {
+    fn new(config: PluginConfig) -> Self {
+        let service = TranscriberService::with_audio_roots(config.allowed_audio_roots);
+        let diagnostics = service.diagnostics();
+        Self {
+            service: Arc::new(Mutex::new(service)),
+            diagnostics: Arc::new(RwLock::new(diagnostics)),
+        }
+    }
+
+    fn lock_service(&self) -> std::sync::MutexGuard<'_, TranscriberService> {
+        match self.service.lock() {
+            Ok(service) => service,
+            Err(poisoned) => {
+                let mut service = poisoned.into_inner();
+                service.dispose();
+                self.service.clear_poison();
+                self.publish(service.diagnostics());
+                service
+            }
+        }
+    }
+
+    fn publish(&self, diagnostics: Diagnostics) {
+        match self.diagnostics.write() {
+            Ok(mut snapshot) => *snapshot = diagnostics,
+            Err(poisoned) => {
+                *poisoned.into_inner() = diagnostics;
+                self.diagnostics.clear_poison();
+            }
+        }
+    }
+
+    fn diagnostics(&self) -> Diagnostics {
+        match self.diagnostics.read() {
+            Ok(snapshot) => snapshot.clone(),
+            Err(poisoned) => {
+                let snapshot = poisoned.into_inner().clone();
+                self.diagnostics.clear_poison();
+                snapshot
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -321,15 +418,20 @@ async fn prepare(
     options: PrepareOptions,
 ) -> Result<EngineInformation, TranscriptionError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || lock_service(&state)?.prepare(options))
-        .await
-        .map_err(|_| {
-            TranscriptionError::new(
-                TranscriptionErrorCode::Internal,
-                "The model preparation task did not complete.",
-                true,
-            )
-        })?
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut service = state.lock_service();
+        let result = service.prepare(options);
+        state.publish(service.diagnostics());
+        result
+    })
+    .await
+    .map_err(|_| {
+        TranscriptionError::new(
+            TranscriptionErrorCode::Internal,
+            "The model preparation task did not complete.",
+            true,
+        )
+    })?
 }
 
 #[tauri::command]
@@ -340,7 +442,10 @@ async fn transcribe(
 ) -> Result<Transcript, TranscriptionError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        lock_service(&state)?.transcribe(input, options.unwrap_or_default())
+        let mut service = state.lock_service();
+        let result = service.transcribe(input, options.unwrap_or_default());
+        state.publish(service.diagnostics());
+        result
     })
     .await
     .map_err(|_| {
@@ -353,25 +458,17 @@ async fn transcribe(
 }
 
 #[tauri::command]
-async fn diagnostics(state: State<'_, ManagedState>) -> Result<Diagnostics, TranscriptionError> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || Ok(lock_service(&state)?.diagnostics()))
-        .await
-        .map_err(|_| {
-            TranscriptionError::new(
-                TranscriptionErrorCode::Internal,
-                "The diagnostics task did not complete.",
-                true,
-            )
-        })?
+fn diagnostics(state: State<'_, ManagedState>) -> Diagnostics {
+    state.diagnostics()
 }
 
 #[tauri::command]
 async fn dispose(state: State<'_, ManagedState>) -> Result<(), TranscriptionError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        lock_service(&state)?.dispose();
-        Ok(())
+        let mut service = state.lock_service();
+        service.dispose();
+        state.publish(service.diagnostics());
     })
     .await
     .map_err(|_| {
@@ -380,11 +477,15 @@ async fn dispose(state: State<'_, ManagedState>) -> Result<(), TranscriptionErro
             "The disposal task did not complete.",
             true,
         )
-    })?
+    })?;
+    Ok(())
 }
 
-/// Creates the Tauri 2 plugin. Hosts must explicitly grant command permissions.
-pub fn init<R: Runtime>() -> TauriPlugin<R> {
+/// Creates the Tauri 2 plugin with explicit host-owned audio roots.
+///
+/// Hosts must also grant command permissions. An empty configuration keeps
+/// filesystem transcription denied.
+pub fn init<R: Runtime>(config: PluginConfig) -> TauriPlugin<R> {
     Builder::new(PLUGIN_NAME)
         .invoke_handler(tauri::generate_handler![
             prepare,
@@ -392,9 +493,69 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             diagnostics,
             dispose
         ])
-        .setup(|app, _api| {
-            app.manage(ManagedState::default());
+        .setup(move |app, _api| {
+            app.manage(ManagedState::new(config));
             Ok(())
         })
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temporary_directory(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("the system clock must be after the Unix epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("crunchymurmur-tauri-{name}-{unique}"));
+        fs::create_dir_all(&directory).expect("the temporary directory should be created");
+        directory
+    }
+
+    #[test]
+    fn audio_paths_are_restricted_to_host_owned_roots() {
+        let allowed = temporary_directory("allowed");
+        let outside = temporary_directory("outside");
+        let allowed_audio = allowed.join("message.wav");
+        let outside_audio = outside.join("message.wav");
+        fs::write(&allowed_audio, b"audio").expect("the allowed fixture should be written");
+        fs::write(&outside_audio, b"audio").expect("the outside fixture should be written");
+        let roots = vec![allowed.canonicalize().expect("the root should resolve")];
+
+        assert_eq!(
+            resolve_allowed_audio_path(&allowed_audio, &roots)
+                .expect("the host-owned audio path should be accepted"),
+            allowed_audio
+                .canonicalize()
+                .expect("the audio path should resolve")
+        );
+        let error = resolve_allowed_audio_path(&outside_audio, &roots)
+            .expect_err("audio outside the configured roots must be rejected");
+        assert_eq!(error.code(), TranscriptionErrorCode::AudioInvalid);
+
+        fs::remove_dir_all(allowed).expect("the allowed fixture should be removed");
+        fs::remove_dir_all(outside).expect("the outside fixture should be removed");
+    }
+
+    #[test]
+    fn a_poisoned_service_recovers_to_idle() {
+        let state = ManagedState::new(PluginConfig::new());
+        let service = state.service.clone();
+        let panic_result = catch_unwind(AssertUnwindSafe(move || {
+            let _guard = service.lock().expect("the fresh mutex should lock");
+            panic!("simulate an engine panic");
+        }));
+        assert!(panic_result.is_err());
+        assert!(state.service.is_poisoned());
+
+        drop(state.lock_service());
+
+        assert!(!state.service.is_poisoned());
+        assert_eq!(state.diagnostics().state, "idle");
+    }
 }

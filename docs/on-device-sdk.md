@@ -237,8 +237,11 @@ The Node adapter will support Electron main processes and ordinary Node applicat
 Tauri 2 desktop applications link the in-repository Rust plugin directly:
 
 ```rust
+let transcription = tauri_plugin_crunchymurmur_transcribe::PluginConfig::new()
+    .allow_audio_root(recordings_directory);
+
 tauri::Builder::default()
-    .plugin(tauri_plugin_crunchymurmur_transcribe::init())
+    .plugin(tauri_plugin_crunchymurmur_transcribe::init(transcription))
     .run(tauri::generate_context!())?;
 ```
 
@@ -256,9 +259,11 @@ const result = await transcriber.transcribe({ path: recordedWavPath });
 ```
 
 The default Tauri permission set exposes diagnostics only. Hosts explicitly
-grant preparation, filesystem transcription, and disposal to trusted windows.
-Tauri desktop uses direct Rust linkage; Tauri mobile still requires the same
-iOS and Android lifecycle work as the other native adapters.
+grant preparation, filesystem transcription, and disposal to trusted windows,
+and configure existing host-owned recording roots. Canonical path validation
+keeps audio reads beneath those roots; an empty configuration denies all audio
+paths. Tauri desktop uses direct Rust linkage; Tauri mobile still requires the
+same iOS and Android lifecycle work as the other native adapters.
 
 ## Audio contract
 

@@ -16,11 +16,53 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Verify the temporary Tauri glib advisory scope
+        shell: bash
+        run: |
+          actual="$(
+            cargo tree \
+              --locked \
+              --manifest-path packages/transcribe-tauri/Cargo.toml \
+              --target x86_64-unknown-linux-gnu \
+              --edges normal \
+              --prefix none \
+              --invert glib |
+              sed -E 's/ v[0-9].*$//' |
+              sort -u
+          )"
+          expected="$(
+            printf '%s\n' \
+              atk \
+              cairo-rs \
+              gdk \
+              gdk-pixbuf \
+              gio \
+              glib \
+              gtk \
+              javascriptcore-rs \
+              muda \
+              pango \
+              soup3 \
+              tauri \
+              tauri-plugin-crunchymurmur-transcribe \
+              tauri-runtime \
+              webkit2gtk |
+              sort -u
+          )"
+          diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual")
+          cargo tree \
+            --locked \
+            --manifest-path packages/transcribe-tauri/Cargo.toml \
+            --target x86_64-unknown-linux-gnu \
+            --depth 0 \
+            --invert glib |
+            grep -Fx 'glib v0.18.5'
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           # Tauri 2.11's Linux WebKit stack still uses glib 0.18. The affected
-          # VariantStrIter API is not called by this plugin; remove this narrow
-          # exception as soon as Tauri adopts glib 0.20 or newer.
+          # VariantStrIter API is not called by this plugin. The preceding tree
+          # guard prevents the exception from silently expanding. Tracked by
+          # https://github.com/a-streetcoder/CrunchyMurmur/issues/72.
           allow-ghsas: GHSA-wrw7-89jp-8q8g
 
   test:

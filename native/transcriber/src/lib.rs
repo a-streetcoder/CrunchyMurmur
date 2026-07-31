@@ -387,6 +387,10 @@ impl OnDeviceEngine {
     }
 
     /// Prepares a model from a profile that has already been validated.
+    ///
+    /// This uses [`Self::prepare`], which clears the engine's stored trust
+    /// digest. Callers implementing a trusted preparation flow must restore
+    /// their authenticated digest only after this method succeeds.
     pub fn prepare_validated_profile(
         &mut self,
         profile: &ModelProfile,
@@ -401,7 +405,8 @@ impl OnDeviceEngine {
         trusted_manifest_sha256: &str,
     ) -> Result<EngineInfo, EngineError> {
         let trusted_digest = trusted_manifest_sha256.trim().to_ascii_lowercase();
-        if self.model_path.as_deref() == Some(model_directory)
+        let canonical_directory = model_directory.canonicalize().ok();
+        if canonical_directory.as_deref() == self.model_path.as_deref()
             && self.parakeet.is_some()
             && self.trusted_manifest_sha256.as_deref() == Some(trusted_digest.as_str())
         {

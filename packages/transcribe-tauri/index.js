@@ -36,7 +36,7 @@ export function createTranscriber(invokeCommand = defaultInvoke) {
       return call('prepare', { options });
     },
     transcribe(input, options = {}) {
-      if (!String(input?.path || '').trim()) {
+      if (typeof input?.path !== 'string' || !input.path.trim()) {
         return Promise.reject(new TranscriptionError({
           code: 'AUDIO_INVALID',
           message: 'A local audio file path is required.',
