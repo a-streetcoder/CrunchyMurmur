@@ -14,6 +14,11 @@ use transcribe_rs::{SpeechModel, TranscribeOptions};
 
 const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Returns the semantic version of the shared native engine.
+pub fn engine_version() -> &'static str {
+    ENGINE_VERSION
+}
+
 /// Stable machine-readable failure categories exposed by the native engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineErrorCode {
@@ -300,6 +305,11 @@ impl ModelProfile {
     pub fn directory(&self) -> &Path {
         &self.directory
     }
+
+    /// Returns the spoken-language identifiers supported by this model.
+    pub fn languages(&self) -> &[String] {
+        &self.languages
+    }
 }
 
 /// Stateful on-device engine that keeps one Parakeet model warm for reuse.
@@ -376,6 +386,18 @@ impl OnDeviceEngine {
         self.prepare(model_directory)
     }
 
+    /// Prepares a model from a profile that has already been validated.
+    ///
+    /// This uses [`Self::prepare`], which clears the engine's stored trust
+    /// digest. Callers implementing a trusted preparation flow must restore
+    /// their authenticated digest only after this method succeeds.
+    pub fn prepare_validated_profile(
+        &mut self,
+        profile: &ModelProfile,
+    ) -> Result<EngineInfo, EngineError> {
+        self.prepare(profile.directory())
+    }
+
     /// Validates an authenticated Model Profile and prepares its model files.
     pub fn prepare_trusted_profile(
         &mut self,
@@ -383,7 +405,8 @@ impl OnDeviceEngine {
         trusted_manifest_sha256: &str,
     ) -> Result<EngineInfo, EngineError> {
         let trusted_digest = trusted_manifest_sha256.trim().to_ascii_lowercase();
-        if self.model_path.as_deref() == Some(model_directory)
+        let canonical_directory = model_directory.canonicalize().ok();
+        if canonical_directory.as_deref() == self.model_path.as_deref()
             && self.parakeet.is_some()
             && self.trusted_manifest_sha256.as_deref() == Some(trusted_digest.as_str())
         {
@@ -392,8 +415,8 @@ impl OnDeviceEngine {
                 reused: true,
             });
         }
-        ModelProfile::load_trusted(model_directory, trusted_manifest_sha256)?;
-        let info = self.prepare(model_directory)?;
+        let profile = ModelProfile::load_trusted(model_directory, trusted_manifest_sha256)?;
+        let info = self.prepare_validated_profile(&profile)?;
         self.trusted_manifest_sha256 = Some(trusted_digest);
         Ok(info)
     }

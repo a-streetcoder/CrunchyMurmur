@@ -54,14 +54,17 @@ diagnostics and app logs.
 Before either local or cloud inference, `src/audio-quality.js` rejects clips
 that are too short or effectively silent.
 
-## Reusable on-device engine direction
+## Reusable on-device engine
 
-The approved [On-device Transcription SDK design](on-device-sdk.md) extracts
-the Rust transcription implementation into a reusable library while retaining
-the existing helper as an isolated desktop adapter. Node/Electron and Tauri are
-the first package targets. Swift, Kotlin, and React Native adapters follow only
-after the shared engine contract and mobile model profiles pass conformance,
-memory, and performance testing.
+The [On-device Transcription SDK](on-device-sdk.md) exposes the Rust
+transcription implementation as a reusable library while retaining the existing
+helper as an isolated Node/Electron adapter. The in-repository Tauri 2 plugin
+links that same crate directly and places model preparation, transcription,
+diagnostics, and disposal behind explicit Tauri command permissions. Audio reads
+are additionally restricted to canonical host-configured recording roots.
+Swift, Kotlin, and React Native adapters follow only after the shared engine
+contract and mobile model profiles pass conformance, memory, and performance
+testing.
 
 Microphone capture remains owned by each host platform. The reusable engine
 accepts local audio, manages model and inference lifecycle, and produces stable

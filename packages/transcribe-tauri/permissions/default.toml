@@ -1,0 +1,10 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = """
+Allows privacy-safe transcription diagnostics only.
+
+Model preparation, filesystem transcription and disposal must be granted
+explicitly to trusted application windows.
+"""
+permissions = ["allow-diagnostics"]

@@ -1,0 +1,29 @@
+{
+  "name": "@crunchymurmur/transcribe-tauri",
+  "version": "0.0.0-development",
+  "description": "Provisional Tauri 2 guest bindings for CrunchyMurmur on-device transcription.",
+  "type": "module",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@tauri-apps/api": ">=2.11.0 <3"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a-streetcoder/CrunchyMurmur.git",
+    "directory": "packages/transcribe-tauri"
+  }
+}
