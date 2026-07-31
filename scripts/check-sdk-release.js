@@ -25,7 +25,8 @@ for (const directory of ['packages/transcribe-node', 'packages/transcribe-tauri'
 
 for (const file of ['native/transcriber/Cargo.toml', 'packages/transcribe-tauri/Cargo.toml']) {
   const manifest = fs.readFileSync(path.join(ROOT, file), 'utf8');
-  if (!new RegExp(`^version = "${version.replaceAll('.', '\\.')}"$`, 'm').test(manifest)) {
+  const manifestLines = manifest.split(/\r?\n/).map((line) => line.trim());
+  if (!manifestLines.includes(`version = "${version}"`)) {
     throw new Error(`${file} does not match SDK version ${version}.`);
   }
   if (/^publish = false$/m.test(manifest)) {
