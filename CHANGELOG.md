@@ -5,6 +5,11 @@ Versioning and the Keep a Changelog structure.
 
 ## [Unreleased]
 
+### Added
+
+- A publishable `0.1.0-alpha.1` on-device transcription SDK: the shared Rust engine, Node/Electron and Tauri adapters, a common four-method lifecycle, stable result types, privacy-safe diagnostics, package provenance, and automated npm/crates.io/GitHub prerelease publication.
+- A secure, local-first Electron chat demo with microphone capture, automatic light/dark appearance, 12 interface languages, temporary WAV cleanup, and a narrow renderer-to-main transcription bridge.
+
 ## [0.1.3] - 2026-07-24
 
 ### Added

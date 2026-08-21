@@ -1,0 +1,42 @@
+{
+  "name": "@crunchymurmur/transcribe-node",
+  "version": "0.1.0-alpha.1",
+  "description": "Private, on-device transcription for Node.js and Electron applications.",
+  "license": "MIT",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./index.js",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a-streetcoder/CrunchyMurmur.git",
+    "directory": "packages/transcribe-node"
+  },
+  "homepage": "https://github.com/a-streetcoder/CrunchyMurmur/tree/main/packages/transcribe-node",
+  "bugs": {
+    "url": "https://github.com/a-streetcoder/CrunchyMurmur/issues"
+  },
+  "keywords": [
+    "transcription",
+    "speech-to-text",
+    "on-device",
+    "electron",
+    "parakeet"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

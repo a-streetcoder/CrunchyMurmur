@@ -1,10 +1,9 @@
+use crunchymurmur_transcriber::{
+    EngineError, EngineInfo, OnDeviceEngine, TranscriptOutcome, engine_version,
+};
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
-use transcribe_rs::onnx::Quantization;
-use transcribe_rs::onnx::parakeet::ParakeetModel;
-use transcribe_rs::{SpeechModel, TranscribeOptions};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +13,10 @@ struct Request {
     model_path: String,
     #[serde(default)]
     audio_path: String,
+    #[serde(default)]
+    require_profile: bool,
+    #[serde(default)]
+    trusted_manifest_sha256: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -23,9 +26,23 @@ struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
     text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    outcome: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    error_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recoverable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     model_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    engine_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reused: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     load_ms: Option<u128>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -37,55 +54,63 @@ impl Response {
         Self {
             ok: true,
             text: None,
+            outcome: None,
             error: None,
+            error_code: None,
+            recoverable: None,
             model_path: None,
+            engine_version: Some(engine_version().to_string()),
+            model_id: None,
+            model_version: None,
+            reused: None,
             load_ms: None,
             inference_ms: None,
         }
     }
 
-    fn failure(error: impl ToString) -> Self {
+    fn failure(error: &EngineError) -> Self {
         Self {
             ok: false,
             error: Some(error.to_string()),
+            error_code: Some(error.code().as_str().to_string()),
+            recoverable: Some(error.recoverable()),
+            ..Self::success()
+        }
+    }
+
+    fn protocol_failure(code: &str, error: impl ToString) -> Self {
+        Self {
+            ok: false,
+            error: Some(error.to_string()),
+            error_code: Some(code.to_string()),
+            recoverable: Some(false),
             ..Self::success()
         }
     }
 }
 
 struct Runtime {
-    parakeet: Option<ParakeetModel>,
+    engine: OnDeviceEngine,
     model_path: Option<PathBuf>,
-    last_load_ms: Option<u128>,
 }
 
 impl Runtime {
     fn new() -> Self {
         Self {
-            parakeet: None,
+            engine: OnDeviceEngine::new(),
             model_path: None,
-            last_load_ms: None,
         }
     }
 
-    fn load_parakeet(&mut self, model_path: &Path) -> Result<u128, String> {
-        if self.model_path.as_deref() == Some(model_path) && self.parakeet.is_some() {
-            return Ok(0);
+    fn prepare_for(&mut self, path: &Path, request: &Request) -> Result<EngineInfo, EngineError> {
+        if !request.trusted_manifest_sha256.is_empty() {
+            self.engine
+                .prepare_trusted_profile(path, &request.trusted_manifest_sha256)
+        } else if request.require_profile {
+            self.engine.prepare_profile(path)
+        } else {
+            self.engine.prepare(path)
         }
-        if !model_path.is_dir() {
-            return Err(format!(
-                "Parakeet model directory was not found: {}",
-                model_path.display()
-            ));
-        }
-        let started = Instant::now();
-        let model = ParakeetModel::load(&model_path.to_path_buf(), &Quantization::Int8)
-            .map_err(|error| error.to_string())?;
-        let elapsed = started.elapsed().as_millis();
-        self.parakeet = Some(model);
-        self.model_path = Some(model_path.to_path_buf());
-        self.last_load_ms = Some(elapsed);
-        Ok(elapsed)
     }
 
     fn handle(&mut self, request: Request) -> Response {
@@ -96,52 +121,56 @@ impl Runtime {
                     .model_path
                     .as_ref()
                     .map(|path| path.to_string_lossy().into_owned());
-                response.load_ms = self.last_load_ms;
+                response.load_ms = self.engine.last_load_ms();
                 response
             }
             "load" => {
-                let path = PathBuf::from(request.model_path);
-                match self.load_parakeet(&path) {
-                    Ok(load_ms) => {
+                let path = PathBuf::from(&request.model_path);
+                let result = self.prepare_for(&path, &request);
+                match result {
+                    Ok(info) => {
+                        self.model_path = Some(path.clone());
                         let mut response = Response::success();
                         response.model_path = Some(path.to_string_lossy().into_owned());
-                        response.load_ms = Some(load_ms);
+                        response.model_id = info.model_id;
+                        response.model_version = info.model_version;
+                        response.reused = Some(info.reused);
+                        response.load_ms = Some(info.load_ms);
                         response
                     }
-                    Err(error) => Response::failure(error),
+                    Err(error) => Response::failure(&error),
                 }
             }
             "transcribe" => {
-                let model_path = PathBuf::from(request.model_path);
-                let audio_path = PathBuf::from(request.audio_path);
-                if let Err(error) = self.load_parakeet(&model_path) {
-                    return Response::failure(error);
+                let model_path = PathBuf::from(&request.model_path);
+                let audio_path = PathBuf::from(&request.audio_path);
+                let prepared = self.prepare_for(&model_path, &request);
+                if let Err(error) = prepared {
+                    return Response::failure(&error);
                 }
-                if !audio_path.is_file() {
-                    return Response::failure(format!(
-                        "Audio file was not found: {}",
-                        audio_path.display()
-                    ));
-                }
-                let started = Instant::now();
-                let result = self
-                    .parakeet
-                    .as_mut()
-                    .expect("model was loaded")
-                    .transcribe_file(&audio_path, &TranscribeOptions::default());
-                match result {
-                    Ok(result) => {
+                self.model_path = Some(model_path.clone());
+                match self.engine.transcribe_file(&audio_path) {
+                    Ok(transcript) => {
                         let mut response = Response::success();
-                        response.text = Some(result.text.trim().to_string());
+                        response.text = Some(transcript.text);
+                        response.outcome = Some(
+                            match transcript.outcome {
+                                TranscriptOutcome::Speech => "speech",
+                                TranscriptOutcome::NoSpeech => "no-speech",
+                            }
+                            .to_string(),
+                        );
                         response.model_path = Some(model_path.to_string_lossy().into_owned());
-                        response.inference_ms = Some(started.elapsed().as_millis());
+                        response.inference_ms = Some(transcript.inference_ms);
                         response
                     }
-                    Err(error) => Response::failure(error),
+                    Err(error) => Response::failure(&error),
                 }
             }
             "shutdown" => Response::success(),
-            action => Response::failure(format!("Unknown action: {action}")),
+            action => {
+                Response::protocol_failure("INVALID_REQUEST", format!("Unknown action: {action}"))
+            }
         }
     }
 }
@@ -166,7 +195,10 @@ fn main() -> io::Result<()> {
         let request = match serde_json::from_str::<Request>(&line) {
             Ok(request) => request,
             Err(error) => {
-                write_response(&Response::failure(format!("Invalid request: {error}")))?;
+                write_response(&Response::protocol_failure(
+                    "INVALID_REQUEST",
+                    format!("Invalid request: {error}"),
+                ))?;
                 continue;
             }
         };
