@@ -16,7 +16,54 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+      - name: Verify the temporary Tauri glib advisory scope
+        shell: bash
+        run: |
+          actual="$(
+            cargo tree \
+              --locked \
+              --manifest-path packages/transcribe-tauri/Cargo.toml \
+              --target x86_64-unknown-linux-gnu \
+              --edges normal \
+              --prefix none \
+              --invert glib |
+              sed -E 's/ v[0-9].*$//' |
+              sort -u
+          )"
+          expected="$(
+            printf '%s\n' \
+              atk \
+              cairo-rs \
+              gdk \
+              gdk-pixbuf \
+              gio \
+              glib \
+              gtk \
+              javascriptcore-rs \
+              muda \
+              pango \
+              soup3 \
+              tauri \
+              tauri-plugin-crunchymurmur-transcribe \
+              tauri-runtime \
+              webkit2gtk |
+              sort -u
+          )"
+          diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual")
+          cargo tree \
+            --locked \
+            --manifest-path packages/transcribe-tauri/Cargo.toml \
+            --target x86_64-unknown-linux-gnu \
+            --depth 0 \
+            --invert glib |
+            grep -Fx 'glib v0.18.5'
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Tauri 2.11's Linux WebKit stack still uses glib 0.18. The affected
+          # VariantStrIter API is not called by this plugin. The preceding tree
+          # guard prevents the exception from silently expanding. Tracked by
+          # https://github.com/a-streetcoder/CrunchyMurmur/issues/72.
+          allow-ghsas: GHSA-wrw7-89jp-8q8g
 
   test:
     strategy:
@@ -30,14 +77,27 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils
       - run: npm ci
       - run: npm run check
       - run: cargo test --locked --manifest-path native/transcriber/Cargo.toml
-      # Gate strictly on what ships to users; the dev toolchain stays visible
-      # below without blocking releases on advisories we cannot fix upstream.
-      - run: npm audit --audit-level=high --omit=dev
-      - name: Audit dev toolchain (advisory only)
-        run: npm audit --audit-level=high || echo "::warning::High-severity advisories in devDependencies (build toolchain only, not shipped to users)."
+      - run: cargo test --locked --manifest-path packages/transcribe-tauri/Cargo.toml
+      # Runtime dependencies ship in the application and remain release
+      # blocking. Build-only dependency changes are covered by the dedicated
+      # dependency-review job above.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run release:check
       - name: Validate Unix source bootstrap
         if: runner.os != 'Windows'
