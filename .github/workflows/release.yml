@@ -147,11 +147,11 @@ jobs:
       - run: bash scripts/prepare-macos-icon.sh
       - run: bash scripts/build-macos-native.sh
       - run: npm run prepare:whisper:mac
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: macos-transcriber-x64
           path: build/transcriber-runtime/mac-x64
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: macos-transcriber-arm64
           path: build/transcriber-runtime/mac-arm64
@@ -251,7 +251,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: release-*
           path: release-assets
