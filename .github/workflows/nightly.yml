@@ -46,3 +46,35 @@ jobs:
     with:
       release_tag: ${{ needs.tag.outputs.release_tag }}
     secrets: inherit
+
+  cleanup:
+    needs: [tag, release]
+    if: ${{ always() && needs.tag.result == 'success' && needs.release.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to delete the orphaned Nightly tag.
+    steps:
+      - name: Delete the orphaned Nightly tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.tag.outputs.release_tag }}
+        # A bare tag with no release behind it appears in the releases.atom
+        # feed the updater reads, which breaks update checks for everyone on
+        # the Nightly channel. A failed run must not leave its tag behind.
+        run: |
+          set +e
+          response=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "Release $TAG exists; keeping the tag."
+          elif echo "$response" | grep -q "HTTP 404"; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG"
+            echo "Deleted orphaned tag $TAG."
+          else
+            # An auth, network, or rate-limit failure must never delete a
+            # tag that may have a release behind it.
+            echo "$response"
+            echo "Could not determine whether release $TAG exists; keeping the tag." >&2
+            exit 1
+          fi

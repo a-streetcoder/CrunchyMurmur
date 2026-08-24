@@ -28,7 +28,7 @@ Enable GitHub private vulnerability reporting, require pull requests and CI on `
 ## Release procedure
 
 1. Update `CHANGELOG.md` and set the same stable version in `package.json` and `package-lock.json`.
-2. Run `npm ci`, `npm run check`, `npm audit --audit-level=high`, and `npm run release:check` from a clean checkout. CI also parses both source bootstraps on their native shells.
+2. Run `npm ci`, `npm run check`, `npm audit --omit=dev --audit-level=high`, and `npm run release:check` from a clean checkout. CI also parses both source bootstraps on their native shells. The high-severity audit gates on the dependencies shipped to users; development and build dependency changes are reviewed on pull requests by dependency-review.
 3. Merge the reviewed release commit to `main`.
 4. Create and push the matching annotated tag, for example `v0.1.0`.
 5. The Release workflow validates the tag/version pair, builds and signs Windows x64/arm64, signs and notarizes macOS universal, and builds Linux x64/arm64 AppImage and Debian packages.
