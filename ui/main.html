@@ -727,6 +727,92 @@
     </main>
     </div>
 
+    <!-- First-run onboarding: shown once when no transcription engine is configured yet. -->
+    <div id="onboarding" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+      <div class="modal onboarding">
+        <header class="onboarding-header">
+          <img class="onboarding-mark" src="../assets/brand-mark.svg" alt="" />
+          <div class="onboarding-heading">
+            <h3 id="onboardingTitle">Welcome to CrunchyMurmur</h3>
+            <p class="muted small">Two quick choices and dictation works in every app on this computer.</p>
+          </div>
+          <span id="onboardingStepIndicator" class="onboarding-step-indicator"></span>
+        </header>
+
+        <section class="onboarding-step active" data-onboarding-step="engine">
+          <p class="onboarding-lead">Choose where transcription runs. You can change this any time in Settings.</p>
+          <div class="onboarding-options" role="radiogroup">
+            <label class="onboarding-option">
+              <input type="radio" name="onboardingEngine" value="parakeet" checked />
+              <span class="onboarding-option-body">
+                <span class="onboarding-option-title"><span>Parakeet V3</span> <span class="badge recommended">Recommended</span></span>
+                <span class="onboarding-option-detail">Fast and accurate, fully offline. 25 European languages, detected automatically.</span>
+                <span class="onboarding-option-meta" id="onboardingParakeetMeta"></span>
+              </span>
+            </label>
+            <label class="onboarding-option">
+              <input type="radio" name="onboardingEngine" value="local" />
+              <span class="onboarding-option-body">
+                <span class="onboarding-option-title"><span>Whisper</span></span>
+                <span class="onboarding-option-detail">99+ languages, manual language selection, and translation. Fully offline.</span>
+                <select id="onboardingWhisperModel" class="onboarding-option-select" aria-label="Whisper model"></select>
+              </span>
+            </label>
+            <label class="onboarding-option">
+              <input type="radio" name="onboardingEngine" value="groq" />
+              <span class="onboarding-option-body">
+                <span class="onboarding-option-title"><span>Groq (cloud)</span></span>
+                <span class="onboarding-option-detail">Nothing to download. Each recording is sent to Groq’s Whisper API using your own free API key.</span>
+                <span class="onboarding-fields" id="onboardingGroqFields">
+                  <input id="onboardingGroqKey" type="password" placeholder="gsk_..." autocomplete="off" aria-label="Groq API key" />
+                  <span class="muted small">Create a key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.</span>
+                </span>
+              </span>
+            </label>
+          </div>
+          <p id="onboardingEngineError" class="onboarding-error" hidden></p>
+          <footer class="onboarding-actions">
+            <button type="button" class="text-button" id="onboardingSkip">Set up later</button>
+            <button type="button" class="primary-button" id="onboardingContinue">Continue</button>
+          </footer>
+        </section>
+
+        <section class="onboarding-step" data-onboarding-step="download">
+          <p class="onboarding-lead" id="onboardingDownloadTitle"></p>
+          <div class="onboarding-progress">
+            <div class="progress-track"><div class="progress-fill" id="onboardingProgressFill"></div></div>
+            <span class="progress-label" id="onboardingProgressLabel">Starting…</span>
+          </div>
+          <p class="muted small">The model is stored on this computer and is never downloaded again.</p>
+          <p id="onboardingDownloadError" class="onboarding-error" hidden></p>
+          <footer class="onboarding-actions">
+            <button type="button" class="text-button" id="onboardingDownloadBack">Back</button>
+            <button type="button" class="primary-button" id="onboardingDownloadRetry" hidden>Try again</button>
+          </footer>
+        </section>
+
+        <section class="onboarding-step" data-onboarding-step="permissions">
+          <p class="onboarding-lead">CrunchyMurmur needs a few system permissions to hear you and to type for you.</p>
+          <div id="onboardingPermissions" class="permissions-list"></div>
+          <p class="muted small">Grant each one in the system dialog, then come back here. Everything can be changed later in Settings.</p>
+          <footer class="onboarding-actions">
+            <span></span>
+            <button type="button" class="primary-button" id="onboardingPermissionsContinue">Continue</button>
+          </footer>
+        </section>
+
+        <section class="onboarding-step" data-onboarding-step="done">
+          <p class="onboarding-lead onboarding-done-title">You’re all set.</p>
+          <p id="onboardingDoneHint"></p>
+          <p class="muted small">Your recordings, transcripts, and notes stay on this computer.</p>
+          <footer class="onboarding-actions">
+            <span></span>
+            <button type="button" class="primary-button" id="onboardingFinish">Start dictating</button>
+          </footer>
+        </section>
+      </div>
+    </div>
+
     <script src="editor.bundle.js"></script>
     <script src="messages.js"></script>
     <script src="i18n.js"></script>

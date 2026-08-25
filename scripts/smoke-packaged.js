@@ -109,6 +109,19 @@ async function evaluate(target, expression) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       if (!window.__lastSettings) throw new Error('Renderer settings did not finish loading.');
+      // Renderer start-up ends by opening the first-run wizard on a fresh
+      // profile. Wait for that point so the catalog, permissions, and engine
+      // state are populated, then dismiss the wizard so the settings sections
+      // underneath are what gets measured.
+      for (let attempt = 0; attempt < 300 && document.documentElement.dataset.ready !== 'true'; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (document.documentElement.dataset.ready !== 'true') throw new Error('Renderer start-up did not finish within 30 seconds.');
+      if (document.getElementById('onboarding').classList.contains('hidden')) throw new Error('First-run onboarding did not open on a fresh profile.');
+      document.getElementById('onboardingSkip').click();
+      for (let attempt = 0; attempt < 50 && !document.getElementById('onboarding').classList.contains('hidden'); attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
       const keyText = () => document.getElementById('hotkeyDisplay').innerText;
       const painted = () => new Promise((resolve) => setTimeout(resolve, 75));
       document.querySelector('[data-tab="settings"]').click();
@@ -198,7 +211,14 @@ async function evaluate(target, expression) {
       }
       if (modelQualities.length !== expectedModelCount
           || modelQualities.some((text) => !text || /\{\d+\}/.test(text))) {
-        throw new Error('Model metadata did not become ready: ' + JSON.stringify(modelQualities));
+        throw new Error('Model metadata did not become ready: ' + JSON.stringify({
+          modelQualities,
+          expectedModelCount,
+          modelCards: document.querySelectorAll('.model-card').length,
+          ready: document.documentElement.dataset.ready || '',
+          onboardingHidden: document.getElementById('onboarding').classList.contains('hidden'),
+          engineKind: window.__lastSettings?.engineKind,
+        }));
       }
 
       document.querySelector('.settings-nav-item[data-settings-section="templates"]').click();

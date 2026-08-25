@@ -87,6 +87,26 @@ test('desktop shell opens and exposes stable settings controls', { timeout: 30_0
   }
   await page.waitForFunction(() => document.documentElement.dataset.ready === 'true');
 
+  // A fresh profile has no transcription engine configured, so the first-run
+  // wizard opens with the three engine choices and Parakeet preselected.
+  const onboarding = page.locator('#onboarding');
+  assert.equal(await onboarding.isVisible(), true, 'first-run onboarding did not open on a fresh profile');
+  assert.deepEqual(await page.locator('input[name="onboardingEngine"]').evaluateAll((inputs) => inputs.map((input) => input.value)), ['parakeet', 'local', 'groq']);
+  assert.equal(await page.locator('input[name="onboardingEngine"][value="parakeet"]').isChecked(), true);
+  assert.equal(await page.locator('#onboardingStepIndicator').textContent(), process.platform === 'linux' ? 'Step 1 of 2' : 'Step 1 of 3');
+  assert.ok((await page.locator('#onboardingParakeetMeta').textContent()).includes('MB'), 'the Parakeet option must state its download size');
+  assert.ok((await page.locator('#onboardingWhisperModel option').count()) >= 5, 'the Whisper choice must list downloadable models');
+  // Groq needs a key before it can continue.
+  await page.locator('input[name="onboardingEngine"][value="groq"]').check();
+  assert.equal(await page.locator('#onboardingStepIndicator').textContent(), process.platform === 'linux' ? 'Step 1 of 1' : 'Step 1 of 2');
+  await page.locator('#onboardingContinue').click();
+  assert.equal(await page.locator('#onboardingEngineError').isVisible(), true, 'continuing with Groq and no key must explain what is missing');
+  // "Set up later" closes the wizard for good and lands on Transcription settings.
+  await page.locator('#onboardingSkip').click();
+  assert.equal(await onboarding.isVisible(), false);
+  assert.equal(await page.locator('#settings-transcription').evaluate((section) => section.classList.contains('active')), true);
+  await page.waitForFunction(() => window.__lastSettings?.onboardingCompleted === 'true');
+
   // Navigation labels must retain their semantic source when switching away
   // from a locale where templates and models share the same translated word.
   const restoredNavigationLabels = await page.evaluate(() => {
