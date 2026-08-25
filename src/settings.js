@@ -11,6 +11,12 @@ function defaultHotkey(platform = process.platform) {
   return 'CommandOrControl+Shift+Space';
 }
 
+function normalizeMicDeviceId(value) {
+  const deviceId = String(value || '').trim();
+  const alias = deviceId.toLowerCase();
+  return alias === 'default' || alias === 'communications' ? '' : deviceId;
+}
+
 const DEFAULTS = {
   uiLocale: 'system', // system | supported BCP 47 language code
   theme: 'system', // 'system' | 'light' | 'dark'
@@ -103,6 +109,7 @@ function encryptKey(plain) {
 function load() {
   const raw = readRaw();
   const cfg = { ...DEFAULTS, ...raw };
+  cfg.micDeviceId = normalizeMicDeviceId(cfg.micDeviceId);
   if (!['stable', 'nightly'].includes(cfg.updateChannel)) cfg.updateChannel = 'stable';
   if (!['true', 'false'].includes(cfg.allowUpdateDowngrade)) cfg.allowUpdateDowngrade = 'false';
   if (!raw.audioRetentionPolicy && raw.meetingRetentionDays) {
@@ -132,7 +139,8 @@ function save(partial) {
   for (const k of Object.keys(partial || {})) {
     if (!Object.hasOwn(DEFAULTS, k)) continue;
     if (ENCRYPTED_KEYS.some((e) => e.plain === k)) continue; // handled below
-    stored[k] = String(partial[k] ?? '').slice(0, 10_000);
+    const value = k === 'micDeviceId' ? normalizeMicDeviceId(partial[k]) : partial[k];
+    stored[k] = String(value ?? '').slice(0, 10_000);
   }
 
   for (const k of ENCRYPTED_KEYS) {
