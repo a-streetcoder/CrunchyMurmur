@@ -2351,6 +2351,218 @@ document.getElementById('deleteAllMeetingAudio').addEventListener('click', async
   await refreshMeetingAudioUsage();
 });
 
+// ----- First-run onboarding -----
+// Shown once when no transcription engine is configured yet: choose an engine,
+// fill whatever that choice needs (a model download or an API key), review
+// the system permissions, done. "Set up later" lands on the manual
+// Transcription settings and the wizard never nags again.
+const onboardingEl = document.getElementById('onboarding');
+const onboardingStepIndicatorEl = document.getElementById('onboardingStepIndicator');
+const onboardingWhisperModelEl = document.getElementById('onboardingWhisperModel');
+const onboardingGroqKeyEl = document.getElementById('onboardingGroqKey');
+const onboardingEngineErrorEl = document.getElementById('onboardingEngineError');
+const onboardingDownloadTitleEl = document.getElementById('onboardingDownloadTitle');
+const onboardingProgressFillEl = document.getElementById('onboardingProgressFill');
+const onboardingProgressLabelEl = document.getElementById('onboardingProgressLabel');
+const onboardingDownloadErrorEl = document.getElementById('onboardingDownloadError');
+const onboardingDownloadRetryBtn = document.getElementById('onboardingDownloadRetry');
+const onboardingDoneHintEl = document.getElementById('onboardingDoneHint');
+const ONBOARDING_DEFAULT_WHISPER_MODEL = 'large-v3-turbo-q5_0';
+let onboardingDownloadId = '';
+let onboardingSteps = [];
+
+function onboardingEngineChoice() {
+  return document.querySelector('input[name="onboardingEngine"]:checked')?.value || 'parakeet';
+}
+
+function onboardingPlan(engine) {
+  const platform = window.__lastSettings?.platform;
+  const steps = ['engine'];
+  if (engine !== 'groq') steps.push('download');
+  if (platform === 'darwin' || platform === 'win32') steps.push('permissions');
+  return steps;
+}
+
+function showOnboardingStep(name) {
+  onboardingEl.querySelectorAll('.onboarding-step').forEach((step) => step.classList.toggle('active', step.dataset.onboardingStep === name));
+  const index = onboardingSteps.indexOf(name);
+  onboardingStepIndicatorEl.textContent = index >= 0
+    ? window.i18n.t('Step {0} of {1}', { 0: index + 1, 1: onboardingSteps.length })
+    : '';
+  onboardingEl.querySelector('.modal')?.scrollTo(0, 0);
+}
+
+function onboardingModelForEngine(engine) {
+  if (engine === 'parakeet') return catalog.find((m) => m.family === 'parakeet');
+  if (engine === 'local') return catalog.find((m) => m.id === onboardingWhisperModelEl.value);
+  return null;
+}
+
+// Push the saved engine configuration into the Transcription settings so the
+// manual page agrees with the wizard without a reload.
+function hydrateEngineSettings(cfg) {
+  window.__lastSettings = cfg;
+  parakeetModelPathEl.value = cfg.parakeetModelPath || '';
+  modelPathEl.value = cfg.modelPath || '';
+  groqApiKeyEl.value = cfg.groqApiKey || '';
+  applyEngineKind(cfg.engineKind || 'parakeet');
+}
+
+async function openOnboarding() {
+  if (!catalog.length) await refreshCatalog();
+  const parakeet = catalog.find((m) => m.family === 'parakeet');
+  document.getElementById('onboardingParakeetMeta').textContent = parakeet
+    ? window.i18n.t('One-time download: {0}.', { 0: formatBytes(parakeet.size) })
+    : '';
+  onboardingWhisperModelEl.innerHTML = '';
+  for (const m of catalog.filter((model) => model.family !== 'parakeet')) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = `${m.name} · ${formatBytes(m.size)} · ${window.i18n.t(m.language)}`;
+    opt.selected = m.id === ONBOARDING_DEFAULT_WHISPER_MODEL;
+    onboardingWhisperModelEl.appendChild(opt);
+  }
+  onboardingSteps = onboardingPlan(onboardingEngineChoice());
+  onboardingEl.classList.remove('hidden');
+  showOnboardingStep('engine');
+}
+
+function advanceOnboarding(from) {
+  const next = onboardingSteps[onboardingSteps.indexOf(from) + 1];
+  if (next === 'permissions') void renderOnboardingPermissions();
+  if (!next) onboardingDoneHintEl.textContent = onboardingDoneHint();
+  showOnboardingStep(next || 'done');
+}
+
+function onboardingDoneHint() {
+  const hotkey = hotkeyEl.value;
+  if (hotkey === 'Fn') return window.i18n.t('Hold Fn (🌐) in any app and speak. Release it and your words are typed where your cursor is.');
+  if (hotkey === 'Control+Super') return window.i18n.t('Hold Ctrl + Win in any app and speak. Release the keys and your words are typed where your cursor is.');
+  return window.i18n.t('Press your shortcut ({0}) in any app to start dictating, and press it again to transcribe.', { 0: hotkey });
+}
+
+async function closeOnboarding(destinationTab) {
+  onboardingEl.classList.add('hidden');
+  try {
+    window.__lastSettings = await window.wisper.saveSettings({ onboardingCompleted: 'true' });
+  } catch {
+    // Not persisting only means the wizard shows again next launch.
+  }
+  switchTab(destinationTab);
+}
+
+async function startOnboardingDownload() {
+  const engine = onboardingEngineChoice();
+  const model = onboardingModelForEngine(engine);
+  if (!model) return;
+  onboardingDownloadId = model.id;
+  onboardingDownloadTitleEl.textContent = window.i18n.t('Downloading {0}…', { 0: model.name });
+  onboardingProgressFillEl.style.width = '0%';
+  onboardingProgressLabelEl.textContent = window.i18n.t('Starting…');
+  onboardingDownloadErrorEl.hidden = true;
+  onboardingDownloadRetryBtn.hidden = true;
+  showOnboardingStep('download');
+  downloadingIds.add(model.id);
+  renderModels();
+  const result = await window.wisper.modelsDownload(model.id);
+  downloadingIds.delete(model.id);
+  await refreshCatalog();
+  await populateInstalledPicker();
+  if (onboardingDownloadId !== model.id) return; // the user went back meanwhile
+  onboardingDownloadId = '';
+  if (!result.ok) {
+    if (/canceled/i.test(result.error || '')) { showOnboardingStep('engine'); return; }
+    onboardingDownloadErrorEl.textContent = window.i18n.t('The download failed: {0}', { 0: result.error });
+    onboardingDownloadErrorEl.hidden = false;
+    onboardingDownloadRetryBtn.hidden = false;
+    return;
+  }
+  try {
+    hydrateEngineSettings(await window.wisper.saveSettings(engine === 'parakeet'
+      ? { engineKind: 'parakeet', parakeetModelPath: result.path }
+      : { engineKind: 'local', modelPath: result.path }));
+  } catch (error) {
+    onboardingDownloadErrorEl.textContent = error.message || String(error);
+    onboardingDownloadErrorEl.hidden = false;
+    onboardingDownloadRetryBtn.hidden = false;
+    return;
+  }
+  advanceOnboarding('download');
+}
+
+async function renderOnboardingPermissions() {
+  const list = document.getElementById('onboardingPermissions');
+  const statuses = await window.wisper.permissionsStatus();
+  const rows = [['microphone', window.i18n.t('Microphone'), window.i18n.t('Required to record your voice.')]];
+  if (window.__lastSettings?.platform === 'darwin') {
+    rows.push(
+      ['accessibility', window.i18n.t('Accessibility'), window.i18n.t('Lets CrunchyMurmur paste the transcript into the app you are using.')],
+      ['inputMonitoring', window.i18n.t('Input Monitoring'), window.i18n.t('Lets the Fn push-to-talk shortcut work in every app.')],
+    );
+  }
+  list.innerHTML = '';
+  for (const [kind, label, why] of rows) {
+    const status = String(statuses[kind] || 'unknown');
+    const row = document.createElement('div');
+    row.className = 'permission-row onboarding-permission';
+    row.innerHTML = `<span><span class="onboarding-permission-name">${escapeHtml(label)}</span><span class="muted small">${escapeHtml(why)}</span></span>`
+      + `<span class="permission-status ${escapeHtml(status)}">${escapeHtml(status.replaceAll('-', ' '))}</span>`
+      + `<button class="text-button" type="button">${escapeHtml(window.i18n.t('Open settings'))}</button>`;
+    row.querySelector('button').addEventListener('click', () => window.wisper.permissionsOpen(kind));
+    list.appendChild(row);
+  }
+}
+
+document.querySelectorAll('input[name="onboardingEngine"]').forEach((radio) => {
+  radio.addEventListener('change', () => {
+    onboardingEngineErrorEl.hidden = true;
+    onboardingSteps = onboardingPlan(onboardingEngineChoice());
+    showOnboardingStep('engine');
+  });
+});
+document.getElementById('onboardingContinue').addEventListener('click', async () => {
+  onboardingEngineErrorEl.hidden = true;
+  const engine = onboardingEngineChoice();
+  onboardingSteps = onboardingPlan(engine);
+  if (engine !== 'groq') { await startOnboardingDownload(); return; }
+  const key = onboardingGroqKeyEl.value.trim();
+  if (!key) {
+    onboardingEngineErrorEl.textContent = window.i18n.t('Paste your Groq API key to continue.');
+    onboardingEngineErrorEl.hidden = false;
+    onboardingGroqKeyEl.focus();
+    return;
+  }
+  try {
+    hydrateEngineSettings(await window.wisper.saveSettings({ engineKind: 'groq', groqApiKey: key }));
+  } catch (error) {
+    onboardingEngineErrorEl.textContent = error.message || String(error);
+    onboardingEngineErrorEl.hidden = false;
+    return;
+  }
+  advanceOnboarding('engine');
+});
+document.getElementById('onboardingSkip').addEventListener('click', () => closeOnboarding('engine'));
+document.getElementById('onboardingDownloadBack').addEventListener('click', () => {
+  if (onboardingDownloadId) window.wisper.modelsCancel(onboardingDownloadId);
+  onboardingDownloadId = '';
+  showOnboardingStep('engine');
+});
+onboardingDownloadRetryBtn.addEventListener('click', () => startOnboardingDownload());
+document.getElementById('onboardingPermissionsContinue').addEventListener('click', () => advanceOnboarding('permissions'));
+document.getElementById('onboardingFinish').addEventListener('click', () => closeOnboarding('dashboard'));
+// Permission grants happen in system dialogs; re-check when the user returns.
+window.addEventListener('focus', () => {
+  if (!onboardingEl.classList.contains('hidden') && onboardingEl.querySelector('.onboarding-step.active')?.dataset.onboardingStep === 'permissions') {
+    void renderOnboardingPermissions();
+  }
+});
+window.wisper.onModelProgress(({ id, bytesDone, bytesTotal }) => {
+  if (id !== onboardingDownloadId) return;
+  const pct = bytesTotal > 0 ? (bytesDone / bytesTotal) * 100 : 0;
+  onboardingProgressFillEl.style.width = pct.toFixed(1) + '%';
+  onboardingProgressLabelEl.textContent = `${formatBytes(bytesDone)} / ${formatBytes(bytesTotal)} · ${pct.toFixed(0)}%`;
+});
+
 (async () => {
   const cfg = await window.wisper.getSettings();
   window.__lastSettings = cfg;
@@ -2442,7 +2654,9 @@ document.getElementById('deleteAllMeetingAudio').addEventListener('click', async
     : cfg.engineKind === 'parakeet'
       ? !cfg.parakeetModelPath
       : !cfg.modelPath;
-  if (needsSetup) {
+  if (needsSetup && cfg.onboardingCompleted !== 'true') {
+    await openOnboarding();
+  } else if (needsSetup) {
     switchTab('engine');
   }
   document.documentElement.dataset.ready = 'true';

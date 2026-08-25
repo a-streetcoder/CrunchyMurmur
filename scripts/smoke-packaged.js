@@ -109,6 +109,10 @@ async function evaluate(target, expression) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       if (!window.__lastSettings) throw new Error('Renderer settings did not finish loading.');
+      // A fresh smoke profile opens the first-run wizard; dismiss it so the
+      // settings sections underneath are what gets measured.
+      document.getElementById('onboardingSkip')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 150));
       const keyText = () => document.getElementById('hotkeyDisplay').innerText;
       const painted = () => new Promise((resolve) => setTimeout(resolve, 75));
       document.querySelector('[data-tab="settings"]').click();

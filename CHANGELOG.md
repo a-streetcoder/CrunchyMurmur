@@ -7,6 +7,7 @@ Versioning and the Keep a Changelog structure.
 
 ### Added
 
+- A first-run setup wizard: choose Parakeet, Whisper, or Groq; the wizard downloads the chosen model (or takes the API key), selects it, and walks through the system permissions, so dictation works right after the first launch without visiting Settings. "Set up later" opens the manual Transcription settings and never nags again.
 - A publishable `0.1.0-alpha.1` on-device transcription SDK: the shared Rust engine, Node/Electron and Tauri adapters, a common four-method lifecycle, stable result types, privacy-safe diagnostics, package provenance, and automated npm/crates.io/GitHub prerelease publication.
 - A secure, local-first Electron chat demo with microphone capture, automatic light/dark appearance, 12 interface languages, temporary WAV cleanup, and a narrow renderer-to-main transcription bridge.
 

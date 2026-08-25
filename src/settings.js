@@ -13,6 +13,7 @@ function defaultHotkey(platform = process.platform) {
 
 const DEFAULTS = {
   uiLocale: 'system', // system | supported BCP 47 language code
+  onboardingCompleted: 'false', // first-run setup wizard finished or skipped
   theme: 'system', // 'system' | 'light' | 'dark'
   overlayX: '',
   overlayY: '',
