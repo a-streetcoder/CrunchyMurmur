@@ -59,7 +59,7 @@
     "@muyajs/core": "0.2.0",
     "@playwright/test": "^1.61.1",
     "acorn": "^8.17.0",
-    "electron": "^43.1.0",
+    "electron": "^44.0.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1"
   },
