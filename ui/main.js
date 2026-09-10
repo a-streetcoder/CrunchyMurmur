@@ -1118,13 +1118,12 @@ async function startMeeting() {
   startMeetingBtn.disabled = true;
   // Get the chosen mic up front so we fail fast if it's misconfigured.
   const cfg = window.__lastSettings || {};
-  const constraints = {
+  const constraints = window.microphoneDevices.withSelectedMicrophone({
     channelCount: 1,
     echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
-  };
-  if (cfg.micDeviceId) constraints.deviceId = { exact: cfg.micDeviceId };
+  }, cfg.micDeviceId);
 
   let stream;
   let systemStream = null;
@@ -1689,7 +1688,7 @@ async function populateMicDevices(selectedId) {
   // Labels are only populated after mic permission has been granted at least
   // once. If we got back unlabeled devices, prompt for permission then re-list.
   let devices = await navigator.mediaDevices.enumerateDevices();
-  let inputs = devices.filter((d) => d.kind === 'audioinput');
+  let inputs = window.microphoneDevices.selectableMicrophones(devices);
   const anyLabeled = inputs.some((d) => d.label);
 
   if (!anyLabeled && inputs.length) {
@@ -1697,7 +1696,7 @@ async function populateMicDevices(selectedId) {
       const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
       tmp.getTracks().forEach((t) => t.stop());
       devices = await navigator.mediaDevices.enumerateDevices();
-      inputs = devices.filter((d) => d.kind === 'audioinput');
+      inputs = window.microphoneDevices.selectableMicrophones(devices);
     } catch {
       // Permission denied; we'll just show a generic list.
     }
@@ -1759,14 +1758,12 @@ function stopMicTest() {
 async function startMicTest() {
   testMicBtn.textContent = 'Stop';
   micTestMeterEl.classList.add('active');
-  const id = micDeviceEl.value || '';
-  const constraints = {
+  const constraints = window.microphoneDevices.withSelectedMicrophone({
     channelCount: 1,
     echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
-  };
-  if (id) constraints.deviceId = { exact: id };
+  }, micDeviceEl.value);
 
   try {
     micTestStream = await navigator.mediaDevices.getUserMedia({ audio: constraints });

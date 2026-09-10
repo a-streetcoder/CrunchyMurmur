@@ -52,19 +52,15 @@ async function startCapture() {
   let micDeviceId = '';
   try {
     const cfg = await window.wisper.getSettings();
-    micDeviceId = (cfg && cfg.micDeviceId) || '';
+    micDeviceId = window.microphoneDevices.normalizeMicDeviceId((cfg && cfg.micDeviceId) || '');
   } catch {}
 
-  const audioConstraints = {
+  const audioConstraints = window.microphoneDevices.withSelectedMicrophone({
     channelCount: 1,
     echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
-  };
-  // `exact` so a saved-but-now-unavailable mic surfaces as an error rather than
-  // silently falling back to a different device (which is exactly the bug we're
-  // trying to fix).
-  if (micDeviceId) audioConstraints.deviceId = { exact: micDeviceId };
+  }, micDeviceId);
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });

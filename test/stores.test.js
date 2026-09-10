@@ -144,6 +144,9 @@ test('settings public view masks persisted API keys', (t) => {
   settings.save({ overlayX: -420, overlayY: 175 });
   assert.equal(settings.load().overlayX, '-420');
   assert.equal(settings.load().overlayY, '175');
+  assert.equal(settings.save({ micDeviceId: 'default' }).micDeviceId, '');
+  assert.equal(settings.save({ micDeviceId: 'communications' }).micDeviceId, '');
+  assert.equal(settings.save({ micDeviceId: 'physical-mic-a' }).micDeviceId, 'physical-mic-a');
   assert.equal(settings.publicView().groqApiKey, settings.SECRET_MASK);
   assert.equal(settings.save({ groqApiKey: settings.SECRET_MASK }).groqApiKey, 'secret-value');
   assert.doesNotMatch(fs.readFileSync(settings.configPath(), 'utf8'), /"groqApiKey"\s*:/);
