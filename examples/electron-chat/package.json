@@ -12,6 +12,6 @@
     "@crunchymurmur/transcribe-node": "file:../../packages/transcribe-node"
   },
   "devDependencies": {
-    "electron": "^43.1.0"
+    "electron": "^43.5.0"
   }
 }
