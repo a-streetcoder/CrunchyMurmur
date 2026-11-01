@@ -7,3 +7,5 @@ README.md
 .gitignore
 .wrangler
 node_modules
+.env*
+.dev.vars*
