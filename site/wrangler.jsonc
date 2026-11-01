@@ -2,6 +2,7 @@
 // generator first, then uploads this folder (minus .assetsignore) as-is.
 {
   "name": "crunchymurmur-site",
+  "account_id": "7ebe461eda2a3307cca084daad3ce27c",
   "compatibility_date": "2026-10-01",
   "build": { "command": "node generate-i18n.js" },
   "assets": { "directory": "." },
