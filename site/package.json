@@ -2,11 +2,11 @@
   "name": "crunchymurmur-site",
   "version": "0.1.0",
   "private": true,
-  "description": "Landing page for CrunchyMurmur, deployed to Railway from this subfolder.",
+  "description": "Landing page for CrunchyMurmur, deployed to Cloudflare Workers (static assets) from this subfolder.",
   "scripts": {
-    "prestart": "node generate-i18n.js",
     "build": "node generate-i18n.js",
-    "start": "node server.js"
+    "start": "npx wrangler dev",
+    "deploy": "npx wrangler deploy"
   },
   "engines": {
     "node": ">=18"

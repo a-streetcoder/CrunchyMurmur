@@ -1,0 +1,11 @@
+# Source/tooling files that must not be served as assets.
+wrangler.jsonc
+package.json
+generate-i18n.js
+i18n-catalog.js
+README.md
+.gitignore
+.wrangler
+node_modules
+.env*
+.dev.vars*
